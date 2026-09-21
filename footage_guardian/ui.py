@@ -12,7 +12,13 @@ from .config import Config, Source
 from .drives import propose_drives
 from .engine import Guardian
 from .manifest import Manifest
-from .ingest import CardInfo, CardIngester, describe_mounted_devices, inspect_card
+from .ingest import (
+    CAMERA_NAMES,
+    CardInfo,
+    CardIngester,
+    describe_mounted_devices,
+    inspect_card,
+)
 from .meta_import import MetaCandidate, MetaImporter, find_recent_meta
 
 
@@ -76,7 +82,8 @@ class App(tk.Tk):
     read, not discover that it happened.
     """
 
-    def __init__(self, config_path: Path, manifest_path: Path, log_path: Path):
+    def __init__(self, config_path: Path, manifest_path: Path, log_path: Path,
+                 probe_hardware: bool = True):
         super().__init__()
         self.title("Footage Guardian Auto DIT")
         self.geometry("1000x700")
@@ -103,10 +110,16 @@ class App(tk.Tk):
         self._build()
         self.refresh_days()
         # Straight after the window is up, not during _build: detection
-        # shells out to diskutil and the window should be on screen
-        # first. Blanks only, so a saved setting is never overwritten
-        # without the operator asking.
-        self.after(200, lambda: self.detect_drives(fill_blanks_only=True))
+        # shells out to diskutil once per mounted volume and the window
+        # should be on screen first. Blanks only, so a saved setting is
+        # never overwritten without the operator asking.
+        #
+        # probe_hardware exists for the tests. Asking the machine what is
+        # plugged in makes a test depend on what happens to be plugged
+        # into it, which is both slow and not reproducible — the window
+        # should be provable on a Mac with nothing attached.
+        if probe_hardware:
+            self.after(200, lambda: self.detect_drives(fill_blanks_only=True))
         self.after(1500, self._tick)
         self.after(150, self._pump)
         self.protocol("WM_DELETE_WINDOW", self.close)
@@ -715,7 +728,8 @@ class CardOffload(tk.Toplevel):
         ttk.Button(form, text="Detect Card", command=self.detect).grid(row=1, column=1, sticky="w", padx=10, pady=5)
         ttk.Label(form, text="Camera name").grid(row=2, column=0, sticky="w", pady=5)
         self.camera = tk.StringVar()
-        self.camera_picker = ttk.Combobox(form, textvariable=self.camera, values=("Main Cam", "360", "Drone"), state="readonly")
+        self.camera_picker = ttk.Combobox(form, textvariable=self.camera,
+                                          values=CAMERA_NAMES, state="readonly")
         self.camera_picker.grid(row=2, column=1, sticky="ew", padx=10)
         self.camera_picker.bind("<<ComboboxSelected>>", lambda _: self._camera_changed())
         ttk.Label(form, text="Main Cam card").grid(row=3, column=0, sticky="w", pady=5)
@@ -761,9 +775,12 @@ class CardOffload(tk.Toplevel):
             self.card = inspect_card(Path(self.card_path.get()), self.ingester.manifest)
             prior = self.ingester.prior_ingest(self.card.fingerprint)
             prior_text = f" Already verified at: {prior['destination_path']}" if prior and prior["state"] == "VERIFIED" else ""
-            self.camera.set(self.card.suggested_camera)
-            if self.card.suggested_camera not in {"Main Cam", "360", "Drone"}:
-                self.camera.set("")
+            # Keep whatever was worked out. This used to blank anything
+            # outside a three-item list, so a correctly detected Osmo
+            # left him with an empty dropdown and no way to say what it
+            # was.
+            self.camera.set(self.card.suggested_camera
+                            if self.card.suggested_camera in CAMERA_NAMES else "")
             self._camera_changed()
             self.card_summary.configure(text=(f"Detected {self.card.volume_name}: {len(self.card.files)} files, "
                 f"{self.card.total_bytes / (1024 ** 3):.2f} GB. Card ID {self.card.card_label}. "

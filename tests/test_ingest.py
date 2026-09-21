@@ -5,6 +5,8 @@ import unittest
 from pathlib import Path
 
 from footage_guardian.ingest import (
+    CAMERA_NAMES,
+    detectable_camera_names,
     CardIngester,
     camera_from_device_name,
     classify_source,
@@ -242,3 +244,30 @@ class CardIngestTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CameraNameCoverageTests(unittest.TestCase):
+    """The offload screen has to be able to say every name detection can produce.
+
+    The dropdown listed three, and the code blanked anything else — so a
+    correctly identified DJI Osmo, the one case the USB hardware check
+    exists to settle, arrived at a field that could not express it and
+    was thrown away. Adding a detector without adding it here puts that
+    bug straight back.
+    """
+
+    def test_every_detectable_camera_can_be_chosen(self):
+        missing = detectable_camera_names() - set(CAMERA_NAMES)
+        self.assertEqual(missing, set(),
+                         f"detectable but not offered on the offload screen: {sorted(missing)}")
+
+    def test_the_operators_own_kit_is_listed_first(self):
+        # He meets these; the rest are there so nothing is ever blanked.
+        self.assertEqual(CAMERA_NAMES[:5],
+                         ("Main Cam", "360", "Drone", "DJI Osmo", "meta glasses"))
+
+    def test_the_ambiguous_pair_is_both_offered(self):
+        # A DJI drone and an Osmo write identical cards. Being unable to
+        # pick the right one is the whole failure this guards.
+        self.assertIn("Drone", CAMERA_NAMES)
+        self.assertIn("DJI Osmo", CAMERA_NAMES)

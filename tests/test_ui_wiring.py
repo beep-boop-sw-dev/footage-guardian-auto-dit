@@ -33,9 +33,12 @@ class WindowWiringTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name)
+        # No hardware probing: these prove the window, and what is
+        # plugged into the machine running them is not part of that.
         self.app = App(self.root / "config.json",
                        self.root / "manifest.sqlite3",
-                       self.root / "guardian.log")
+                       self.root / "guardian.log",
+                       probe_hardware=False)
         self.app.withdraw()
         self.addCleanup(self.temp.cleanup)
         self.addCleanup(self.app.destroy)

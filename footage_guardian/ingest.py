@@ -57,6 +57,32 @@ DEVICE_NAME_PATTERNS: list[tuple[str, tuple[str, ...]]] = [
 ]
 
 
+# Every camera name the offload screen must be able to offer.
+#
+# The detectors below can return any of these, and the dropdown used to
+# list three. A correctly identified DJI Osmo — the one case the whole
+# hardware check exists to settle — arrived at a field that could not
+# express it, and the screen then blanked the answer it had just worked
+# out. test_camera_names_are_complete keeps this list and the detectors
+# in step.
+#
+# Ordered as the operator meets them: his own kit first, then everything
+# else the detectors know.
+CAMERA_NAMES: tuple[str, ...] = (
+    "Main Cam", "360", "Drone", "DJI Osmo", "meta glasses",
+    "GoPro", "Sony", "Canon", "Blackmagic", "RED",
+)
+
+
+def detectable_camera_names() -> set[str]:
+    """Every name the detectors in this module can produce."""
+    names = {camera for camera, _ in CAMERA_PATTERNS}
+    names |= {camera for camera, _ in DEVICE_NAME_PATTERNS}
+    for _, options in AMBIGUOUS_TREES:
+        names |= set(options)
+    return names
+
+
 def camera_from_device_name(product: str, vendor: str = "") -> str:
     """Name the camera from what the hardware calls itself, or '' if unrecognised.
 
