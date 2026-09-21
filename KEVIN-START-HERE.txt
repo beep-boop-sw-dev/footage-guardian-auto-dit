@@ -21,15 +21,22 @@ It asks for your Mac password. That is macOS asking, not us. Typing
 shows nothing on screen — no dots, no stars. That is normal. Type it and
 press Enter.
 
-It then prints a lot and takes a few minutes. At the end it may print
-two lines starting with "echo" and tell you to run them. If it does, run
-them. If it does not, carry on.
+It then prints a lot and takes a few minutes.
 
 Check it worked:
 
     brew --version
 
-You should see a version number.
+You should see a version number. If instead you get "command not found:
+brew", Homebrew did install — it just has not told Terminal where it is.
+That is normal on this Mac and it is the most common snag in this whole
+setup. Paste these three, one at a time:
+
+    echo >> ~/.zprofile
+    echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' >> ~/.zprofile
+    eval "$(/opt/homebrew/bin/brew shellenv)"
+
+Then try brew --version again. You only ever do this once.
 
 ────────────────────────────────────────────────────────────────────────
 STEP 2 — GET THE APP
@@ -130,8 +137,10 @@ Nothing here can harm your footage. Nothing in this setup touches a
 camera, a card, or a drive — it only installs software.
 
   "command not found: brew"
-      Step 1 did not finish, or the two "echo" lines it printed were not
-      run. Close Terminal, open it again, and try brew --version.
+      Homebrew is installed but not on the path yet. Check it is there:
+      ls /opt/homebrew/bin/brew
+      If that prints a path, run the three lines at the end of Step 1.
+      If it says no such file, Step 1 did not finish — run it again.
 
   "command not found: git"
       Step 1 installs this alongside Homebrew. If it is missing, run

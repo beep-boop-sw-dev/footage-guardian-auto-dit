@@ -188,11 +188,19 @@
     <p>That is macOS asking, not us. <strong>Typing shows nothing on screen</strong> — no dots, no stars. That is normal. Type it and press Enter.</p>
   </div>
 
-  <p>It then prints a lot and takes a few minutes. At the end it may print two lines starting with <span class="mono">echo</span> and tell you to run them. <strong>If it does, run them.</strong> If it does not, carry on.</p>
+  <p>It then prints a lot and takes a few minutes.</p>
 
   <p class="type-this">Check it worked</p>
   <div class="cmd">brew --version</div>
   <p>You should see a version number.</p>
+
+  <p>If instead you get <span class="mono">command not found: brew</span>, Homebrew did install — it just has not told Terminal where it is. <strong>That is normal on this Mac, and it is the most common snag in this whole setup.</strong> Paste these three, one at a time:</p>
+
+  <div class="cmd small">echo &gt;&gt; ~/.zprofile
+echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' &gt;&gt; ~/.zprofile
+eval "$(/opt/homebrew/bin/brew shellenv)"</div>
+
+  <p>Then try <span class="mono">brew --version</span> again. You only ever do this once.</p>
 </section>
 
 <section>
@@ -292,7 +300,7 @@ git pull</div>
 
   <div class="problem">
     <span class="q">command not found: brew</span>
-    <p class="a">Step 1 did not finish, or the two <span class="mono">echo</span> lines it printed were not run. Close Terminal, open it again, and try <span class="mono">brew --version</span>.</p>
+    <p class="a">Homebrew is installed but not on the path yet. Check it is there with <span class="mono">ls /opt/homebrew/bin/brew</span>. If that prints a path, run the three lines at the end of Step 1. If it says no such file, Step 1 did not finish — run it again.</p>
   </div>
 
   <div class="problem">
