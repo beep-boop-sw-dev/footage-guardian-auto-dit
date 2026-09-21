@@ -80,9 +80,21 @@ three trees identical.
 
 ## Stack (do not deviate without asking)
 - Python 3.10+, standard library only — no runtime dependencies
-- Tkinter for the UI (ships with Python; no install for Kevin)
+- Tkinter for the UI, on a Python that **ships its own Tk 8.6+**. Apple's
+  `/usr/bin/python3` borrows the frozen system Tcl/Tk 8.5.9 and aborts in
+  `TkpInit`; "ships with Python, no install for Kevin" turned out to be
+  false on his Mac. The launcher screens for this — see the Current state
+  section.
 - SQLite in WAL mode for the persistent manifest
 - `rclone` shells out for all Google Drive work
+- **One hosted component, agreed 2026-09-21: ntfy.sh**, for the
+  finished-transfer notification and nothing else. A stdlib `urllib` POST
+  to a secret topic, no account, no dependency. The ping carries **no
+  shoot date, file count, client name or path** — a topic URL is a
+  guessable shared secret, so nothing about the work may travel over it.
+  "Footage Guardian: transfer finished" and that is all. The app must
+  still work fully with notifications switched off or the network down;
+  a failed POST is logged and never fails a transfer.
 
 **Why rclone and not the Drive API:** rclone already handles OAuth, chunked
 resumable uploads, retries, rate limiting, and remote hashes, and is heavily
@@ -197,6 +209,59 @@ Known gaps, in priority order:
    the shared client_id today. Details in `HANDOVER.md`.
 6. **Volume identity is not pinned.** A different disk mounted at the same path
    is silently trusted as the same drive. Should pin macOS volume UUIDs.
+
+## In progress — agreed scope (2026-09-21)
+
+Five pieces, in build order. Each lands with tests and is usable on its own.
+Written down because the first two asks turned out to be already built, and
+the difference between "add a transfer button" and "the bar does not move on
+an 18GB clip" is the whole job.
+
+**1. Byte-level progress.** `copy_verified` moves whole files, and progress is
+reported per file, so a single 18GB clip freezes the bar for minutes and reads
+as hung. Copy in chunks, report bytes, and show transferred / total, rate and
+rough time remaining. The MD5 is already computed while copying — do not add a
+second read of the file to get a percentage.
+*Done when:* the bar advances during one large file, and the suite proves
+progress is reported in byte increments rather than once per file.
+
+**2. Drive auto-detection.** The Drives tab is three text boxes. Every signal
+needed to fill them already exists — `classify_source`, `device_identity`,
+`looks_offloaded`. Detect the plugged-in volumes, propose which is the SSD
+main drive and which are Back up HDD 1 and 2, and let Kevin confirm. The
+dropdown keeps every mounted volume so a wrong guess is one click to fix.
+Detection proposes; it never silently rewrites a saved setting.
+*Done when:* a Mac with the three drives plugged in shows them pre-filled and
+correct, and an unplugged drive is shown as missing rather than blanked.
+
+**3. Confirm-first card flow.** `inspect_card` already suggests the camera;
+Kevin has to press "Detect Card" to see it. Detect on open and on card change,
+and lead with the answer — "Main Cam, card 2, 412 files, 61 GB" and a Confirm
+button — with the dropdown there for when it is wrong.
+**Fix the camera list while doing it:** it is hardcoded to `("Main Cam", "360",
+"Drone")`, and `ui.py` blanks the field when the detection is not one of the
+three. A correctly-detected DJI Osmo currently leaves Kevin with an empty
+dropdown and no way to say what it is. The Osmo and the drone write identical
+cards, so this is the one the hardware check exists to answer.
+*Done when:* every device in "How Kevin actually works" can be chosen, and a
+detected Osmo arrives pre-selected rather than blank.
+
+**4. Transfer on the main window.** Copying a camera lives behind
+`CardOffload`, a dialog he has to open first. Bring the detected cards, the
+confirm step and the transfer onto tab 1 so the common path is visible on
+arrival. Keep one job at a time.
+*Done when:* a card can be copied without opening a dialog, and the existing
+busy-guard still prevents two transfers at once.
+
+**5. Finished-transfer notification.** A ping to his phone when a transfer
+ends, so he can walk away. ntfy.sh, per the Stack note above — contentless,
+optional, and unable to fail a transfer. Off unless a topic is configured.
+*Done when:* finishing a transfer sends one notification, a broken network
+leaves the transfer reported as successful, and the suite covers both without
+touching the network.
+
+Out of scope for now: notifications for anything but a finished transfer,
+and any notification carrying detail about the work.
 
 ## How Kevin actually works (2026-09-16)
 Three deliberate stages, in order, each a button he presses:
