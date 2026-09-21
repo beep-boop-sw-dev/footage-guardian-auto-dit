@@ -161,7 +161,19 @@ Known gaps, in priority order:
 3. **The UI has never been clicked.** Every engine call is tested, but the
    wiring from button to engine is unproven: macOS denies this terminal both
    Screen Recording and Accessibility, so GUI work must be driven through the
-   engine or done by hand.
+   engine or done by hand. The window itself is now known to open — the
+   launcher was run for real on 2026-09-21 and stayed up — but no button in
+   it has been pressed by anyone.
+
+   That launch found the first real-machine bug: `python3 -m
+   footage_guardian.cli` trusts `$PATH`, and installing Homebrew (step one of
+   the operator's own instructions) can put a python3 in front whose Tk is
+   built for a newer macOS. Tk aborts with "macOS 15 (1507) or later
+   required" and macOS shows a crash report instead of the app. The launcher
+   now names `/usr/bin/python3` first, whose Tk always matches the OS.
+   `tests/test_launcher.py` guards it. **Anything the operator's machine does
+   differently from this one is untested until it is run there** — that is the
+   category of bug to expect next.
 4. **DJI device strings are inferred, not confirmed.** `DEVICE_NAME_PATTERNS`
    matches on DJI's model naming. Kevin running `tools/identify_devices.py`
    with everything plugged in gives the real strings.
