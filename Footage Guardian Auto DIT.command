@@ -1,44 +1,62 @@
 #!/bin/zsh
 cd "${0:A:h}"
 
-# Which python3 runs this matters far more than it looks.
+# Which python3 runs this decides whether a window opens at all.
 #
-# Tkinter's Tk framework has to match the macOS it is running on. A
-# Homebrew python3 is built against the newest SDK, so on a Mac a
-# version or two behind it aborts with
+# Tkinter needs a Tk that works on this Mac, and on macOS there are two
+# kinds:
 #
-#     macOS 15 (1507) or later required, have instead 15 (1504)
+#   * A Python that ships its own Tk. python.org's installer bundles
+#     libtk8.6.dylib inside its framework; Homebrew's python-tk brings
+#     its own too. These work.
 #
-# and macOS shows a "Python quit unexpectedly" crash report rather than
-# this app. Installing Homebrew is enough to put such a python3 at the
-# front of $PATH, which is exactly what the setup instructions ask the
-# operator to do first — so `python3` on its own is the one thing this
-# launcher must not rely on.
+#   * A Python that borrows /System/Library/Frameworks/Tk.framework,
+#     which is Tcl/Tk 8.5.9 and frozen years ago. Apple's
+#     /usr/bin/python3 is this one. On the operator's Mac (macOS 15.7.3,
+#     Apple Silicon) it aborts inside TkpInit with a Tcl_Panic and macOS
+#     shows a crash report instead of the app. It happened to survive on
+#     the author's newer macOS, which is exactly why it got shipped once
+#     — do not trust a Tk 8.5 result observed on one machine.
 #
-# /usr/bin/python3 is Apple's. It arrives with the Command Line Tools
-# that Homebrew installs anyway, and its Tk is always the one that
-# matches the OS. It is 3.9, which is older than pyproject's stated
-# floor, but this app is standard-library only and the whole suite
-# passes on it. Deterministic beats new here: every Mac then runs the
-# same interpreter.
-for python in /usr/bin/python3 "${commands[python3]}"; do
+# So: take the first python3 that reports Tk 8.6 or newer. That test is
+# safe to run — reading tkinter.TkVersion loads the library but does not
+# initialise the GUI, so it cannot trigger the abort we are screening
+# for. Apple's 8.5 is ruled out by the version alone.
+typeset -a candidates
+candidates=(
+  /Library/Frameworks/Python.framework/Versions/3.*/bin/python3(NOn)
+  /opt/homebrew/bin/python3(N)
+  /usr/local/bin/python3(N)
+  ${commands[python3]}
+)
+
+for python in $candidates; do
   [[ -n "$python" && -x "$python" ]] || continue
-  "$python" -c 'import tkinter' >/dev/null 2>&1 || continue
+  "$python" -c 'import sys, tkinter; sys.exit(0 if tkinter.TkVersion >= 8.6 else 1)' \
+    >/dev/null 2>&1 || continue
   exec "$python" -m footage_guardian.cli
 done
 
-# Never a stack trace: whoever sees this is a videographer, possibly on
-# a shoot, and needs to know what to do next.
+# Never a stack trace: whoever reads this is a videographer, possibly on
+# a shoot, and needs one instruction.
 print -r -- ""
-print -r -- "Footage Guardian could not start."
+print -r -- "Footage Guardian cannot start yet."
 print -r -- ""
-print -r -- "It needs a copy of Python that can draw windows, and could not"
-print -r -- "find one. Nothing is wrong with your footage or your drives."
+print -r -- "It needs a version of Python that can draw windows. The one"
+print -r -- "built into macOS cannot — that is Apple's, not yours, and"
+print -r -- "nothing is wrong with your Mac, your footage or your drives."
 print -r -- ""
-print -r -- "Send Stuart a photo of this window. To fix it he will ask you"
-print -r -- "to run:  xcode-select --install"
+print -r -- "To fix it, paste this and press Enter:"
 print -r -- ""
-print -r -- "(checked: /usr/bin/python3 and ${commands[python3]:-no python3 on PATH})"
+print -r -- "    brew install python-tk"
+print -r -- ""
+print -r -- "Then double-click Footage Guardian Auto DIT.command again."
+print -r -- ""
+print -r -- "If that does not do it, install Python from python.org:"
+print -r -- "    https://www.python.org/downloads/macos/"
+print -r -- "Take the latest 'macOS 64-bit universal2 installer', open it,"
+print -r -- "click through, then try again. Send Stuart this window if you"
+print -r -- "are stuck."
 print -r -- ""
 print -r -- "Press any key to close."
 read -k 1 -s

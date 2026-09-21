@@ -165,15 +165,29 @@ Known gaps, in priority order:
    launcher was run for real on 2026-09-21 and stayed up — but no button in
    it has been pressed by anyone.
 
-   That launch found the first real-machine bug: `python3 -m
-   footage_guardian.cli` trusts `$PATH`, and installing Homebrew (step one of
-   the operator's own instructions) can put a python3 in front whose Tk is
-   built for a newer macOS. Tk aborts with "macOS 15 (1507) or later
-   required" and macOS shows a crash report instead of the app. The launcher
-   now names `/usr/bin/python3` first, whose Tk always matches the OS.
-   `tests/test_launcher.py` guards it. **Anything the operator's machine does
-   differently from this one is untested until it is run there** — that is the
-   category of bug to expect next.
+   The first real attempt on the operator's Mac (macOS 15.7.3, Apple
+   Silicon) crashed, twice, for one reason: **Apple's `/usr/bin/python3`
+   cannot draw a window.** It borrows
+   `/System/Library/Frameworks/Tk.framework`, which is Tcl/Tk 8.5.9 and
+   frozen years ago, and aborts inside `TkpInit` with a `Tcl_Panic` — macOS
+   shows a crash report instead of the app. `python3 -m footage_guardian.cli`
+   resolved to it (Homebrew installs no Python of its own, so PATH still led
+   there), and the first fix then *pinned* it there, on the false premise
+   that Apple's Tk always matches the OS.
+
+   The rule that actually holds: **take a Python that ships its own Tk.**
+   python.org's installer bundles `libtk8.6.dylib` inside its framework and
+   Homebrew's `python-tk` brings its own; Apple's borrows the system one.
+   The launcher now takes the first python3 reporting Tk >= 8.6, which rules
+   Apple's out by version alone. Reading `tkinter.TkVersion` is safe —
+   it loads the library without initialising the GUI, so screening cannot
+   trigger the abort it screens for. `tests/test_launcher.py` guards all of
+   it and fails against both earlier versions.
+
+   **The lesson worth keeping: Tk 8.5 survived here and aborted there, and
+   that one observation was treated as proof.** Anything the operator's
+   machine does differently is untested until it is run *there*. This
+   machine cannot validate a GUI fix for his.
 4. **DJI device strings are inferred, not confirmed.** `DEVICE_NAME_PATTERNS`
    matches on DJI's model naming. Kevin running `tools/identify_devices.py`
    with everything plugged in gives the real strings.
