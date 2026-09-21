@@ -18,6 +18,7 @@ from .ingest import (
     inspect_card,
 )
 from .manifest import Manifest
+from .progress import ByteProgress
 from .storage import (
     Rclone,
     copy_verified,
@@ -239,7 +240,6 @@ class Guardian:
         already present with matching contents is left alone so the job can be
         stopped and resumed. The SSD is only ever read.
         """
-        report = lambda *args: progress(*args) if progress else None  # noqa: E731
         day_folder = source_root / day
         if not day_folder.is_dir():
             raise RuntimeError(f"There is no folder named {day!r} on {source_root.name}")
@@ -257,29 +257,42 @@ class Guardian:
         if not files:
             raise RuntimeError(f"{day} holds no files yet — has everything finished offloading?")
 
-        total = len(files) * len(roots)
-        done = copied = already = 0
+        # Progress counts footage, not reads. Each byte is hashed once on
+        # the SSD and then copied and re-read on every backup drive, so
+        # one pass plus two per drive. Counting files instead left the bar
+        # motionless for minutes on a single large clip.
+        total_bytes = 0
+        for source in files:
+            try:
+                total_bytes += source.stat().st_size
+            except OSError:
+                pass
+        bar = ByteProgress(total_bytes, passes=1 + 2 * len(roots), report=progress)
+        copied = already = 0
         failures: list[str] = []
 
         for source in files:
             relative = source.relative_to(source_root)
+            bar.label(relative.name)
             try:
                 size = source.stat().st_size
-                digest = md5_file(source)
+                digest = md5_file(source, bar.add)
             except OSError as exc:
                 failures.append(f"{relative}: could not be read ({exc})")
-                done += len(roots)
                 continue
             for root in roots:
-                done += 1
                 destination = root / relative
-                report(done, total, f"{root.name}: {relative.name}")
+                bar.label(f"{root.name}: {relative.name}")
                 try:
                     if verified_copy_exists(destination, size, digest):
                         already += 1
+                        # Nothing was copied, but this file's share of the
+                        # work is done — otherwise a resumed run crawls to
+                        # 100% only at the very end.
+                        bar.add(size * 2, "skipped")
                         continue
                     refuse_if_occupied(destination)
-                    copy_verified(source, destination, digest)
+                    copy_verified(source, destination, digest, bar.add)
                     copied += 1
                 except (OSError, RuntimeError) as exc:
                     failures.append(f"{relative} -> {root.name}: {exc}")

@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Callable
 
 from .manifest import Manifest
+from .progress import ByteProgress
 from .storage import copy_verified, md5_file, refuse_if_occupied, safe_component, verified_copy_exists
 
 
@@ -466,17 +467,20 @@ class CardIngester:
                 destination_path=excluded.destination_path, state='TRANSFERRING', detail=excluded.detail,
                 updated_at=CURRENT_TIMESTAMP""",
                 (card.fingerprint, card.volume_name, camera_name, str(destination), len(card.files), card.total_bytes))
-        completed = 0
+        # Three passes over every byte: hash the source, copy it, re-read
+        # the copy to verify it. Weighting by that keeps the bar counting
+        # footage rather than disk reads, and keeps it moving inside a
+        # single 18GB clip instead of once per file.
+        bar = ByteProgress(card.total_bytes, passes=3, report=progress)
         for index, source in enumerate(card.files, 1):
             relative = source.relative_to(card.root)
             target = destination / relative
-            source_hash = md5_file(source)
+            bar.label(f"{index}/{len(card.files)}  {relative.as_posix()}")
+            source_hash = md5_file(source, bar.add)
             if not verified_copy_exists(target, source.stat().st_size, source_hash):
                 refuse_if_occupied(target)
-                copy_verified(source, target, source_hash)
-            completed += source.stat().st_size
-            if progress:
-                progress(completed, card.total_bytes, f"{index}/{len(card.files)}  {relative.as_posix()}")
+                copy_verified(source, target, source_hash, bar.add)
+        bar.finished(f"{len(card.files)} files verified")
         verified = datetime.now(timezone.utc).isoformat(timespec="seconds")
         with self.manifest.connect() as db:
             db.execute("""UPDATE card_ingests SET state='VERIFIED', detail='Every file size and MD5 verified',

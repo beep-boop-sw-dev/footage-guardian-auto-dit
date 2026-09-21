@@ -7,6 +7,11 @@ import re
 import shutil
 import subprocess
 from pathlib import Path
+from typing import Callable
+
+# Called with (bytes just handled, which pass). Purely for progress —
+# it must never influence whether a copy is accepted.
+OnBytes = Callable[[int, str], None]
 
 
 CHUNK = 8 * 1024 * 1024
@@ -18,11 +23,13 @@ def safe_component(value: str) -> str:
     return value or "Unnamed"
 
 
-def md5_file(path: Path) -> str:
+def md5_file(path: Path, on_bytes: OnBytes | None = None, phase: str = "hash") -> str:
     digest = hashlib.md5(usedforsecurity=False)
     with path.open("rb") as stream:
         while block := stream.read(CHUNK):
             digest.update(block)
+            if on_bytes:
+                on_bytes(len(block), phase)
     return digest.hexdigest()
 
 
@@ -59,18 +66,34 @@ def refuse_if_occupied(destination: Path) -> None:
         )
 
 
-def copy_verified(source: Path, destination: Path, expected_md5: str) -> None:
+def copy_verified(source: Path, destination: Path, expected_md5: str,
+                  on_bytes: OnBytes | None = None) -> None:
+    """Copy, then prove the copy by re-reading what landed.
+
+    The re-read is the point of this function and is never skipped: it
+    is what distinguishes "the bytes were sent" from "the bytes are on
+    the disk". `on_bytes` reports both passes so a bar can move through
+    a single very large file, and is only ever told about progress —
+    it cannot affect the verdict.
+
+    The hand-rolled loop replaces shutil.copyfileobj for the same
+    reason: copyfileobj cannot say how far it has got.
+    """
     destination.parent.mkdir(parents=True, exist_ok=True)
     partial = destination.with_name(destination.name + ".footage-guardian-part")
     if partial.exists():
         partial.unlink()
     try:
         with source.open("rb") as src, partial.open("wb") as dst:
-            shutil.copyfileobj(src, dst, CHUNK)
+            while block := src.read(CHUNK):
+                dst.write(block)
+                if on_bytes:
+                    on_bytes(len(block), "copy")
             dst.flush()
             os.fsync(dst.fileno())
         shutil.copystat(source, partial)
-        if partial.stat().st_size != source.stat().st_size or md5_file(partial) != expected_md5:
+        if (partial.stat().st_size != source.stat().st_size
+                or md5_file(partial, on_bytes, "verify") != expected_md5):
             raise IOError("Backup verification failed")
         partial.replace(destination)
     except Exception:
