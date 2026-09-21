@@ -1,0 +1,168 @@
+FOOTAGE GUARDIAN — INSTALLING IT
+Kevin, this is setup only. Stuart will walk you through using it.
+
+You do all of this in Terminal, once. About 40 minutes, most of it
+waiting. Stuart is on the other end of the phone if any step looks wrong
+— send him what the screen says rather than guessing.
+
+OPENING TERMINAL
+  Press Cmd+Space, type Terminal, press Enter. A window opens with a
+  blinking cursor. You paste a line in, press Enter, wait for the cursor
+  to come back, then do the next one.
+
+────────────────────────────────────────────────────────────────────────
+STEP 1 — INSTALL HOMEBREW
+────────────────────────────────────────────────────────────────────────
+Homebrew is the thing that installs the other things. Paste:
+
+    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+It asks for your Mac password. That is macOS asking, not us. Typing
+shows nothing on screen — no dots, no stars. That is normal. Type it and
+press Enter.
+
+It then prints a lot and takes a few minutes. At the end it may print
+two lines starting with "echo" and tell you to run them. If it does, run
+them. If it does not, carry on.
+
+Check it worked:
+
+    brew --version
+
+You should see a version number.
+
+────────────────────────────────────────────────────────────────────────
+STEP 2 — GET THE APP
+────────────────────────────────────────────────────────────────────────
+The app lives in a private repository, so your Mac has to be signed in
+to it once.
+
+    brew install gh
+
+Then sign in:
+
+    gh auth login
+
+It asks a few questions. Answer:
+
+    GitHub.com
+    HTTPS
+    Yes            (authenticate Git with your GitHub credentials)
+    Login with a web browser
+
+It shows a short code, waits, then opens your browser. Paste the code
+there and click through. If you do not have a GitHub account it will let
+you make one — it is free and you only ever need it for this.
+
+Now download the app:
+
+    cd ~/Desktop
+    gh repo clone beep-boop-sw-dev/footage-guardian-auto-dit "Footage Guardian"
+
+That puts a folder called "Footage Guardian" on your Desktop. That is
+the app.
+
+────────────────────────────────────────────────────────────────────────
+STEP 3 — INSTALL RCLONE
+────────────────────────────────────────────────────────────────────────
+This is what talks to Google Drive.
+
+    brew install rclone
+
+Check it worked:
+
+    rclone version
+
+You should see a version number.
+
+────────────────────────────────────────────────────────────────────────
+STEP 4 — CONNECT GOOGLE DRIVE
+────────────────────────────────────────────────────────────────────────
+    rclone config
+
+This one asks a lot of questions. Answer in this order. Anything not
+listed here, just press Enter to take the default.
+
+    n                      (new remote)
+    gdrive                 (name it exactly this — lowercase)
+    drive                  (the storage type — you can type the number
+                            shown next to "Google Drive" instead)
+    <press Enter>          (client_id — leave blank)
+    <press Enter>          (client_secret — leave blank)
+    1                      (scope: full access)
+    <press Enter>          (root_folder_id — leave blank)
+    <press Enter>          (service_account_file — leave blank)
+    n                      (edit advanced config? no)
+    y                      (use web browser to authenticate? yes)
+
+Your browser opens. Sign in as the shared Google account Stuart gave
+you — not your own personal one — and click Allow. Back in Terminal:
+
+    n                      (configure as a Shared Drive? no)
+    y                      (yes, this is OK)
+    q                      (quit config)
+
+Check it worked:
+
+    rclone lsd gdrive:
+
+It should list your Drive folders, including the team drive Stuart
+named for you. If you see a sign-in error, run:
+
+    rclone config reconnect gdrive:
+
+────────────────────────────────────────────────────────────────────────
+STEP 5 — OPEN IT ONCE
+────────────────────────────────────────────────────────────────────────
+Open the "Footage Guardian" folder on your Desktop and double-click:
+
+    Footage Guardian Auto DIT.command
+
+  If macOS refuses to open it: right-click the file, choose Open, then
+  click Open in the box that appears. You only need to do that once.
+
+A window opens with four tabs along the top. If you got that far, setup
+worked. Leave it there — Stuart will take you through the Drives tab and
+the rest on the phone.
+
+────────────────────────────────────────────────────────────────────────
+GETTING UPDATES LATER
+────────────────────────────────────────────────────────────────────────
+When Stuart tells you there is a fix, close the app, then paste:
+
+    cd ~/Desktop/"Footage Guardian"
+    git pull
+
+That is the whole thing. A second or two, and a short list of what
+changed. Open the app again afterwards.
+
+Your settings and your records are NOT in that folder — they live in
+your Library folder — so an update never touches which drives you chose
+or what has already been copied and verified.
+
+If it ever mentions local changes being overwritten, do not force it.
+Send Stuart the message.
+
+────────────────────────────────────────────────────────────────────────
+IF A STEP GOES WRONG
+────────────────────────────────────────────────────────────────────────
+Nothing here can harm your footage. Nothing in this setup touches a
+camera, a card, or a drive — it only installs software.
+
+  "command not found: brew"
+      Step 1 did not finish, or the two "echo" lines it printed were not
+      run. Close Terminal, open it again, and try brew --version.
+
+  "command not found: gh"
+      Step 2's first line did not finish. Run brew install gh again.
+
+  Password does nothing when you type it
+      That is correct and deliberate. Type it anyway and press Enter.
+
+  The browser sign-in did not come back
+      Close the browser tab and run the command again. Nothing is broken
+      by starting a step over.
+
+  Anything else
+      Take a photo of the Terminal window, or copy the text, and send it
+      to Stuart. The exact wording is what tells him what happened.

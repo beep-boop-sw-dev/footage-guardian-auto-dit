@@ -1,0 +1,339 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Footage Guardian — Installing It</title>
+<style>
+  @page { size: letter; margin: 14mm 15mm 16mm 15mm; }
+  * { box-sizing: border-box; }
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+  body {
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    font-size: 14pt;
+    line-height: 1.62;
+    color: #14181d;
+    margin: 0;
+    background: #fff;
+  }
+  p { margin: 0 0 0.72em; }
+  strong { font-weight: 700; color: #000; }
+
+  .cover {
+    border: 3px solid #14181d;
+    border-radius: 6px;
+    padding: 20px 24px 22px;
+    margin-bottom: 20px;
+  }
+  .cover h1 {
+    font-size: 31pt;
+    line-height: 1.1;
+    margin: 0 0 8px;
+    letter-spacing: -0.5pt;
+    font-weight: 800;
+  }
+  .cover .sub { font-size: 15pt; margin: 0; color: #2b3138; }
+  .cover .sub b { color: #000; }
+
+  h2 {
+    font-size: 20pt;
+    font-weight: 800;
+    letter-spacing: -0.2pt;
+    margin: 0 0 6px;
+    padding: 10px 0 9px;
+    border-top: 3px solid #14181d;
+    border-bottom: 1.5px solid #14181d;
+  }
+  h2 .stepno {
+    display: block;
+    font-size: 11.5pt;
+    font-weight: 700;
+    letter-spacing: 1.3pt;
+    text-transform: uppercase;
+    color: #56606b;
+    margin-bottom: 2px;
+  }
+  section { margin-bottom: 22px; }
+  section.newpage { page-break-before: always; }
+  .keep-together { page-break-inside: avoid; }
+
+  .cmd {
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+    font-size: 12.5pt;
+    line-height: 1.5;
+    background: #f2f4f7;
+    border: 1.5px solid #c3ccd6;
+    border-left: 6px solid #14181d;
+    border-radius: 4px;
+    padding: 12px 14px;
+    margin: 11px 0 13px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    color: #101418;
+    font-weight: 500;
+  }
+  .cmd.small { font-size: 10.5pt; }
+  .cmd .note { color: #4a5560; font-weight: 400; }
+
+  .type-this {
+    font-size: 11.5pt;
+    font-weight: 700;
+    letter-spacing: 0.8pt;
+    text-transform: uppercase;
+    color: #56606b;
+    margin: 13px 0 -5px;
+  }
+
+  .callout {
+    border: 2px solid #14181d;
+    border-radius: 5px;
+    padding: 13px 16px;
+    margin: 14px 0;
+    background: #fbfbf7;
+  }
+  .callout .label {
+    display: block;
+    font-size: 12pt;
+    font-weight: 800;
+    letter-spacing: 0.9pt;
+    text-transform: uppercase;
+    margin-bottom: 5px;
+  }
+  .callout p:last-child { margin-bottom: 0; }
+  .callout.warn { background: #fff6e8; border-color: #8a5a00; }
+  .callout.warn .label { color: #7a4f00; }
+  .callout.safe { background: #eef7f0; border-color: #1c6b38; }
+  .callout.safe .label { color: #17552c; }
+
+  .answers {
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+    font-size: 12pt;
+    line-height: 1.75;
+    border: 1.5px solid #c3ccd6;
+    border-left: 6px solid #14181d;
+    border-radius: 4px;
+    background: #f2f4f7;
+    padding: 12px 14px;
+    margin: 11px 0 13px;
+    font-weight: 600;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .answers .note { color: #4a5560; font-weight: 400; }
+
+  .mono {
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+    font-weight: 600;
+    font-size: 12.5pt;
+    background: #eef1f5;
+    border: 1px solid #c3ccd6;
+    border-radius: 3px;
+    padding: 1px 5px;
+    white-space: nowrap;
+  }
+
+  .problem { margin-bottom: 15px; page-break-inside: avoid; }
+  .problem .q {
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+    font-size: 12.5pt;
+    font-weight: 700;
+    background: #14181d;
+    color: #fff;
+    padding: 5px 11px;
+    border-radius: 3px;
+    display: inline-block;
+    margin-bottom: 6px;
+  }
+  .problem .a { margin: 0; padding-left: 2px; }
+
+  footer {
+    margin-top: 26px;
+    padding-top: 12px;
+    border-top: 1.5px solid #9aa5b1;
+    font-size: 12pt;
+    color: #4a5560;
+  }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <h1>Footage Guardian</h1>
+  <p class="sub"><b>Installing it.</b> This is setup only — Stuart will walk you through using it.</p>
+</div>
+
+<section class="keep-together">
+  <p>You do all of this in Terminal, once. <strong>About 40 minutes</strong>, most of it waiting. Stuart is on the other end of the phone if any step looks wrong — send him what the screen says rather than guessing.</p>
+
+  <div class="callout">
+    <span class="label">Opening Terminal</span>
+    <p>Press <strong>Cmd + Space</strong>, type <strong>Terminal</strong>, press Enter. A window opens with a blinking cursor.</p>
+    <p>You paste a line in, press Enter, wait for the cursor to come back, then do the next one.</p>
+  </div>
+
+  <div class="callout safe">
+    <span class="label">None of this can harm your footage</span>
+    <p>Nothing in this setup touches a camera, a card, or a drive. It only installs software.</p>
+  </div>
+</section>
+
+<section class="newpage">
+  <h2><span class="stepno">Step 1</span>Install Homebrew</h2>
+  <p>Homebrew is the thing that installs the other things.</p>
+
+  <div class="cmd small">/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"</div>
+
+  <div class="callout warn">
+    <span class="label">It asks for your Mac password</span>
+    <p>That is macOS asking, not us. <strong>Typing shows nothing on screen</strong> — no dots, no stars. That is normal. Type it and press Enter.</p>
+  </div>
+
+  <p>It then prints a lot and takes a few minutes. At the end it may print two lines starting with <span class="mono">echo</span> and tell you to run them. <strong>If it does, run them.</strong> If it does not, carry on.</p>
+
+  <p class="type-this">Check it worked</p>
+  <div class="cmd">brew --version</div>
+  <p>You should see a version number.</p>
+</section>
+
+<section>
+  <h2><span class="stepno">Step 2</span>Get the app</h2>
+  <p>The app lives in a private repository, so your Mac has to be signed in to it once.</p>
+
+  <div class="cmd">brew install gh</div>
+
+  <p class="type-this">Then sign in</p>
+  <div class="cmd">gh auth login</div>
+
+  <p>It asks a few questions. Answer:</p>
+
+  <div class="answers">GitHub.com
+HTTPS
+Yes            <span class="note">(authenticate Git with your GitHub credentials)</span>
+Login with a web browser</div>
+
+  <p>It shows a short code, waits, then opens your browser. Paste the code there and click through.</p>
+
+  <p>If you do not have a GitHub account it will let you make one — it is free, and you only ever need it for this.</p>
+
+  <p class="type-this">Now download the app</p>
+  <div class="cmd small">cd ~/Desktop
+gh repo clone beep-boop-sw-dev/footage-guardian-auto-dit "Footage Guardian"</div>
+
+  <p>That puts a folder called <strong>Footage Guardian</strong> on your Desktop. That is the app.</p>
+</section>
+
+<section class="newpage">
+  <h2><span class="stepno">Step 3</span>Install rclone</h2>
+  <p>This is what talks to Google Drive.</p>
+
+  <div class="cmd">brew install rclone</div>
+
+  <p class="type-this">Check it worked</p>
+  <div class="cmd">rclone version</div>
+  <p>You should see a version number.</p>
+</section>
+
+<section>
+  <h2><span class="stepno">Step 4</span>Connect Google Drive</h2>
+
+  <div class="cmd">rclone config</div>
+
+  <p>This one asks a lot of questions. Answer in this order. <strong>Anything not listed here, just press Enter</strong> to take the default.</p>
+
+  <div class="answers">n                 <span class="note">(new remote)</span>
+gdrive            <span class="note">(name it exactly this — lowercase)</span>
+drive             <span class="note">(the storage type — or type the number
+                   shown next to “Google Drive”)</span>
+[Enter]           <span class="note">(client_id — leave blank)</span>
+[Enter]           <span class="note">(client_secret — leave blank)</span>
+1                 <span class="note">(scope: full access)</span>
+[Enter]           <span class="note">(root_folder_id — leave blank)</span>
+[Enter]           <span class="note">(service_account_file — leave blank)</span>
+n                 <span class="note">(edit advanced config? no)</span>
+y                 <span class="note">(use web browser to authenticate? yes)</span></div>
+
+  <p>Your browser opens. <strong>Sign in as the shared Google account Stuart gave you</strong> — not your own personal one — and click Allow. Back in Terminal:</p>
+
+  <div class="answers">n                 <span class="note">(configure as a Shared Drive? no)</span>
+y                 <span class="note">(yes, this is OK)</span>
+q                 <span class="note">(quit config)</span></div>
+
+  <p class="type-this">Check it worked</p>
+  <div class="cmd">rclone lsd gdrive:</div>
+
+  <p>It should list your Drive folders, including <strong>the team drive Stuart named for you</strong>. If you see a sign-in error, run:</p>
+  <div class="cmd">rclone config reconnect gdrive:</div>
+</section>
+
+<section class="newpage">
+  <h2><span class="stepno">Step 5</span>Open it once</h2>
+  <p>Open the <strong>Footage Guardian</strong> folder on your Desktop and double-click:</p>
+
+  <div class="cmd">Footage Guardian Auto DIT.command</div>
+
+  <div class="callout">
+    <span class="label">If macOS refuses to open it</span>
+    <p>Right-click the file, choose <strong>Open</strong>, then click <strong>Open</strong> in the box that appears. You only need to do that once.</p>
+  </div>
+
+  <div class="callout safe">
+    <span class="label">That is setup done</span>
+    <p>A window opens with four tabs along the top. If you got that far, it worked.</p>
+    <p>Leave it there — <strong>Stuart will take you through the Drives tab and the rest on the phone.</strong></p>
+  </div>
+</section>
+
+<section>
+  <h2>Getting updates later</h2>
+  <p>When Stuart tells you there is a fix, <strong>close the app</strong>, then paste:</p>
+
+  <div class="cmd">cd ~/Desktop/"Footage Guardian"
+git pull</div>
+
+  <p>That is the whole thing. A second or two, and a short list of what changed. Open the app again afterwards.</p>
+
+  <div class="callout safe">
+    <span class="label">An update cannot lose your work</span>
+    <p>Your settings and your records are <strong>not</strong> in that folder — they live in your Library folder. So an update never touches which drives you chose, or what has already been copied and verified.</p>
+  </div>
+
+  <div class="callout warn">
+    <span class="label">If it mentions local changes being overwritten</span>
+    <p><strong>Do not force it.</strong> Send Stuart the message.</p>
+  </div>
+</section>
+
+<section class="newpage">
+  <h2>If a step goes wrong</h2>
+  <p>Nothing here can harm your footage. Starting a step over is always safe.</p>
+
+  <div class="problem">
+    <span class="q">command not found: brew</span>
+    <p class="a">Step 1 did not finish, or the two <span class="mono">echo</span> lines it printed were not run. Close Terminal, open it again, and try <span class="mono">brew --version</span>.</p>
+  </div>
+
+  <div class="problem">
+    <span class="q">command not found: gh</span>
+    <p class="a">Step 2's first line did not finish. Run <span class="mono">brew install gh</span> again.</p>
+  </div>
+
+  <div class="problem">
+    <span class="q">The password does nothing when I type it</span>
+    <p class="a">That is correct and deliberate. Type it anyway and press Enter.</p>
+  </div>
+
+  <div class="problem">
+    <span class="q">The browser sign-in did not come back</span>
+    <p class="a">Close the browser tab and run the command again. Nothing is broken by starting a step over.</p>
+  </div>
+
+  <div class="problem">
+    <span class="q">Anything else</span>
+    <p class="a">Take a photo of the Terminal window, or copy the text, and send it to Stuart. <strong>The exact wording is what tells him what happened.</strong></p>
+  </div>
+
+  <footer>Footage Guardian Auto DIT · installation</footer>
+</section>
+
+</body>
+</html>

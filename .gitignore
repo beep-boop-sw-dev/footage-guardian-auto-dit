@@ -1,0 +1,14 @@
+__pycache__/
+*.py[cod]
+.DS_Store
+outputs/
+work/
+build/
+dist/
+*.egg-info/
+*.footage-guardian-part
+
+# Operational handover — the client's Google account, the Drive folder
+# ID and the archive inventory live in here. Never goes in the public
+# repo. Its history is in the private archive repo.
+HANDOVER.md
