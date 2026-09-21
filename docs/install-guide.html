@@ -197,27 +197,10 @@
 
 <section>
   <h2><span class="stepno">Step 2</span>Get the app</h2>
-  <p>The app lives in a private repository, so your Mac has to be signed in to it once.</p>
+  <p>One line. No account, no sign-in.</p>
 
-  <div class="cmd">brew install gh</div>
-
-  <p class="type-this">Then sign in</p>
-  <div class="cmd">gh auth login</div>
-
-  <p>It asks a few questions. Answer:</p>
-
-  <div class="answers">GitHub.com
-HTTPS
-Yes            <span class="note">(authenticate Git with your GitHub credentials)</span>
-Login with a web browser</div>
-
-  <p>It shows a short code, waits, then opens your browser. Paste the code there and click through.</p>
-
-  <p>If you do not have a GitHub account it will let you make one — it is free, and you only ever need it for this.</p>
-
-  <p class="type-this">Now download the app</p>
   <div class="cmd small">cd ~/Desktop
-gh repo clone beep-boop-sw-dev/footage-guardian-auto-dit "Footage Guardian"</div>
+git clone https://github.com/beep-boop-sw-dev/footage-guardian-auto-dit.git "Footage Guardian"</div>
 
   <p>That puts a folder called <strong>Footage Guardian</strong> on your Desktop. That is the app.</p>
 </section>
@@ -313,8 +296,8 @@ git pull</div>
   </div>
 
   <div class="problem">
-    <span class="q">command not found: gh</span>
-    <p class="a">Step 2's first line did not finish. Run <span class="mono">brew install gh</span> again.</p>
+    <span class="q">command not found: git</span>
+    <p class="a">Step 1 installs this alongside Homebrew. If it is missing, run <span class="mono">xcode-select --install</span>, click through, then try Step 2 again.</p>
   </div>
 
   <div class="problem">

@@ -34,30 +34,10 @@ You should see a version number.
 ────────────────────────────────────────────────────────────────────────
 STEP 2 — GET THE APP
 ────────────────────────────────────────────────────────────────────────
-The app lives in a private repository, so your Mac has to be signed in
-to it once.
-
-    brew install gh
-
-Then sign in:
-
-    gh auth login
-
-It asks a few questions. Answer:
-
-    GitHub.com
-    HTTPS
-    Yes            (authenticate Git with your GitHub credentials)
-    Login with a web browser
-
-It shows a short code, waits, then opens your browser. Paste the code
-there and click through. If you do not have a GitHub account it will let
-you make one — it is free and you only ever need it for this.
-
-Now download the app:
+One line. No account, no sign-in.
 
     cd ~/Desktop
-    gh repo clone beep-boop-sw-dev/footage-guardian-auto-dit "Footage Guardian"
+    git clone https://github.com/beep-boop-sw-dev/footage-guardian-auto-dit.git "Footage Guardian"
 
 That puts a folder called "Footage Guardian" on your Desktop. That is
 the app.
@@ -153,8 +133,9 @@ camera, a card, or a drive — it only installs software.
       Step 1 did not finish, or the two "echo" lines it printed were not
       run. Close Terminal, open it again, and try brew --version.
 
-  "command not found: gh"
-      Step 2's first line did not finish. Run brew install gh again.
+  "command not found: git"
+      Step 1 installs this alongside Homebrew. If it is missing, run
+      xcode-select --install, click through, then try Step 2 again.
 
   Password does nothing when you type it
       That is correct and deliberate. Type it anyway and press Enter.
