@@ -9,6 +9,7 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
 from .config import Config, Source
+from .drives import propose_drives
 from .engine import Guardian
 from .manifest import Manifest
 from .ingest import CardInfo, CardIngester, describe_mounted_devices, inspect_card
@@ -101,6 +102,11 @@ class App(tk.Tk):
         self.day = tk.StringVar(value="")
         self._build()
         self.refresh_days()
+        # Straight after the window is up, not during _build: detection
+        # shells out to diskutil and the window should be on screen
+        # first. Blanks only, so a saved setting is never overwritten
+        # without the operator asking.
+        self.after(200, lambda: self.detect_drives(fill_blanks_only=True))
         self.after(1500, self._tick)
         self.after(150, self._pump)
         self.protocol("WM_DELETE_WINDOW", self.close)
@@ -211,15 +217,96 @@ class App(tk.Tk):
     def _build_settings_tab(self) -> None:
         tab = ttk.Frame(self.tabs, padding=16)
         self.tabs.add(tab, text="  Drives  ")
-        self.ssd_var = self._path_row(tab, "SSD main drive", self.config_data.sources[0].path
-                                      if self.config_data.sources else "", 0)
+        ttk.Label(tab, wraplength=860, justify="left", text=(
+            "Plug in the SSD and both backup HDDs and these fill themselves in. Check "
+            "them and press Confirm. If one is wrong, pick the right drive from its "
+            "list — every drive you have plugged in is in there."
+        )).grid(row=0, column=0, columnspan=3, sticky="w", pady=(0, 14))
+
         roots = self.config_data.backup_roots()
-        self.hdd1_var = self._path_row(tab, "Back up HDD 1", str(roots[0]) if roots else "", 1)
-        self.hdd2_var = self._path_row(tab, "Back up HDD 2", str(roots[1]) if len(roots) > 1 else "", 2)
+        self.ssd_var, self.ssd_note, self.ssd_box = self._drive_row(
+            tab, "SSD main drive",
+            self.config_data.sources[0].path if self.config_data.sources else "", 1)
+        self.hdd1_var, self.hdd1_note, self.hdd1_box = self._drive_row(
+            tab, "Back up HDD 1", str(roots[0]) if roots else "", 2)
+        self.hdd2_var, self.hdd2_note, self.hdd2_box = self._drive_row(
+            tab, "Back up HDD 2", str(roots[1]) if len(roots) > 1 else "", 3)
         self.remote_var = self._path_row(tab, "Google Drive folder",
-                                         self.config_data.google_destination, 3, browse=False)
+                                         self.config_data.google_destination, 4, browse=False)
         tab.columnconfigure(1, weight=1)
-        ttk.Button(tab, text="Save", command=self.save).grid(row=4, column=1, sticky="w", pady=14)
+
+        self.drive_missing = ttk.Label(tab, text="", wraplength=860, justify="left",
+                                       font=("Helvetica", 11))
+        self.drive_missing.grid(row=5, column=0, columnspan=3, sticky="w", pady=(10, 0))
+
+        actions = ttk.Frame(tab)
+        actions.grid(row=6, column=0, columnspan=3, sticky="w", pady=14)
+        ttk.Button(actions, text="Confirm these drives", command=self.save).pack(side="left")
+        self.detect_button = ttk.Button(actions, text="Look again", command=self.detect_drives)
+        self.detect_button.pack(side="left", padx=8)
+        self.drive_saved = ttk.Label(actions, text="")
+        self.drive_saved.pack(side="left", padx=10)
+
+    def _drive_row(self, parent, label: str, value: str, row: int):
+        """A drive slot: what we think it is, with every other drive one click away."""
+        ttk.Label(parent, text=label, width=20).grid(row=row, column=0, sticky="w", pady=6)
+        variable = tk.StringVar(value=value)
+        box = ttk.Combobox(parent, textvariable=variable)
+        box.grid(row=row, column=1, sticky="ew", pady=6)
+        note = ttk.Label(parent, text="", width=34, foreground="#555")
+        note.grid(row=row, column=2, sticky="w", padx=8)
+        return variable, note, box
+
+    def detect_drives(self, fill_blanks_only: bool = False) -> None:
+        """Ask macOS what is plugged in, off the main thread.
+
+        `diskutil info` is a subprocess per volume and can take a moment,
+        which would freeze the window if it ran here.
+        """
+        self.detect_button.configure(state="disabled")
+
+        configured_ssd = self.ssd_var.get().strip()
+        configured_backups = (self.hdd1_var.get().strip(), self.hdd2_var.get().strip())
+
+        def worker() -> None:
+            try:
+                plan = propose_drives(configured_ssd, configured_backups)
+            except Exception:  # noqa: BLE001 - detection must never take the app down
+                plan = None
+            self._post(lambda: self._drives_proposed(plan, fill_blanks_only))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _drives_proposed(self, plan, fill_blanks_only: bool) -> None:
+        if not self._alive():
+            return
+        self.detect_button.configure(state="normal")
+        if plan is None:
+            self.drive_missing.configure(text="Could not read the drives just now. Try Look again.")
+            return
+
+        choices = [str(path) for path in plan.volumes]
+        slots = ((self.ssd_var, self.ssd_note, self.ssd_box, plan.ssd),
+                 (self.hdd1_var, self.hdd1_note, self.hdd1_box,
+                  plan.backups[0] if plan.backups else None),
+                 (self.hdd2_var, self.hdd2_note, self.hdd2_box,
+                  plan.backups[1] if len(plan.backups) > 1 else None))
+
+        for variable, note, box, guess in slots:
+            box.configure(values=choices)
+            if guess is None or guess.path is None:
+                note.configure(text="" if variable.get() else "not found — choose it here")
+                continue
+            # Never overwrite something already filled in unless the
+            # operator asked us to look again. This decides where
+            # footage gets written.
+            if variable.get().strip() and fill_blanks_only:
+                continue
+            variable.set(guess.value)
+            note.configure(text=guess.reason if guess.confident else f"best guess — {guess.reason}")
+
+        self.drive_missing.configure(
+            text=("Not plugged in: " + "; ".join(plan.missing)) if plan.missing else "")
 
     def _path_row(self, parent, label: str, value: str, row: int, browse: bool = True) -> tk.StringVar:
         ttk.Label(parent, text=label, width=20).grid(row=row, column=0, sticky="w", pady=6)
@@ -249,7 +336,11 @@ class App(tk.Tk):
         # The SSD is kept out of the plugged-in list, so naming a different one
         # changes what belongs there.
         self.refresh_devices(force=True)
-        messagebox.showinfo("Saved", "Drive settings saved.", parent=self)
+        # Inline rather than a modal: "Confirm" followed by an OK box is
+        # two clicks for one decision, and this is the tab he passes
+        # through on the way to work.
+        self.drive_saved.configure(text="Saved.")
+        self.after(4000, lambda: self.drive_saved.configure(text=""))
 
     def ssd_root(self) -> Path | None:
         if not self.config_data.sources:
@@ -354,11 +445,36 @@ class App(tk.Tk):
             elif kind == "status":
                 self._apply_status(payload)
 
+    def _post(self, callback) -> None:
+        """Hand work back to the Tk thread, tolerating a closed window.
+
+        A background scan can outlive the window that started it — close
+        the app a second after opening it and the thread is still
+        running. Tk may only be touched from the main loop, and touching
+        a destroyed one raises from inside the worker where nothing is
+        watching.
+        """
+        try:
+            if self.winfo_exists():
+                self.after(0, callback)
+        except tk.TclError:
+            pass
+
+    def _alive(self) -> bool:
+        try:
+            return bool(self.winfo_exists())
+        except tk.TclError:
+            return False
+
     def _pump(self) -> None:
+        if not self._alive():
+            return
         self._drain_results()
         self.after(150, self._pump)
 
     def _tick(self) -> None:
+        if not self._alive():
+            return
         if not self.busy:
             self.refresh_devices()
             self.refresh_status()
