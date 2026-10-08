@@ -102,7 +102,8 @@ exactly this reason.
 - `footage_guardian/manifest.py` — SQLite schema and queries
 - `footage_guardian/config.py` — settings, `~/Library/Application Support/…`
 - `footage_guardian/ui.py` — the Tkinter window
-- `Footage Guardian Auto DIT.command` — what the operator double-clicks
+- `Footage Guardian Auto DIT.command` — the launcher; picks a Python that can draw a window
+- `tools/install_app.py` — puts a `Footage Guardian.app` in Applications that runs the launcher
 
 Application data lives in `~/Library/Application Support/Footage Guardian Auto DIT/`:
 `config.json`, `manifest.sqlite3`, and `guardian.log`. WAL mode means progress

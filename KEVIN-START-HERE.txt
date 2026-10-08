@@ -99,18 +99,36 @@ named for you. If you see a sign-in error, run:
     rclone config reconnect gdrive:
 
 ────────────────────────────────────────────────────────────────────────
-STEP 5 — OPEN IT ONCE
+STEP 5 — PUT THE APP IN APPLICATIONS
 ────────────────────────────────────────────────────────────────────────
-Open the "Footage Guardian" folder on your Desktop and double-click:
+This makes Footage Guardian an app you click, like any other. Paste:
 
-    Footage Guardian Auto DIT.command
+    python3 ~/Desktop/"Footage Guardian"/tools/install_app.py
 
-  If macOS refuses to open it: right-click the file, choose Open, then
-  click Open in the box that appears. You only need to do that once.
+It says "Done" and where it put the app. You only ever do this once —
+updates later reach the app by themselves.
+
+Open it: press Cmd+Space, type Footage Guardian, press Enter.
+
+To keep it in the Dock: open your Applications folder and drag
+Footage Guardian onto the Dock. While it runs the Dock may also show a
+Python rocket icon. That is the same app — not the one to keep.
+
+The first time it reads a camera, macOS asks whether Footage Guardian
+may access files on a removable volume. Click Allow. If you click Don't
+Allow it cannot see any card — tell Stuart and he will walk you through
+turning it back on.
 
 A window opens with four tabs along the top. If you got that far, setup
 worked. Leave it there — Stuart will take you through the Drives tab and
 the rest on the phone.
+
+Leave the "Footage Guardian" folder on your Desktop. The app runs what
+is inside it, so moving or renaming the folder stops the app opening.
+If that happens it tells you so — put the folder back.
+
+If the app will not open at all, the old way still works: open the
+Footage Guardian folder and double-click Footage Guardian Auto DIT.command
 
 ────────────────────────────────────────────────────────────────────────
 GETTING UPDATES LATER

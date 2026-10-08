@@ -113,7 +113,12 @@ Next.js version was abandoned for exactly this reason — do not revive it.
 - `footage_guardian/manifest.py` — SQLite schema and queries
 - `footage_guardian/config.py` — settings, `~/Library/Application Support/…`
 - `footage_guardian/ui.py` — Tkinter window
-- `Footage Guardian Auto DIT.command` — what Kevin double-clicks
+- `Footage Guardian Auto DIT.command` — the launcher; chooses the Python
+- `tools/install_app.py` — builds `Footage Guardian.app` in Applications on
+  Kevin's Mac. The app holds no code: it runs the launcher in his clone, so
+  `git pull` updates it. Built locally so macOS never quarantines it. Opened
+  from the Dock, PATH is bare — the launcher adds Homebrew so rclone is
+  found, and shows problems in a dialog since there is no Terminal.
 
 The Python package stays `footage_guardian` even though the app is named
 "Footage Guardian Auto DIT"; renaming it churns every import for no user benefit.
