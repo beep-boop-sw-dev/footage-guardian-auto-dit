@@ -38,14 +38,16 @@ both HDDs — a deliberate deep check, not something to do on every look.
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import threading
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
 from .ingest import DATED_FOLDER
-from .progress import ByteProgress, human_bytes
+from .progress import ByteProgress, human_bytes, human_duration
 from .storage import copy_verified, md5_file, refuse_if_occupied, verified_copy_exists
 
 PART_SUFFIX = ".footage-guardian-part"
@@ -59,6 +61,22 @@ FREE_SPACE_MARGIN = 2 * 1000 ** 3
 # Below this share of a drive left free after a backup, say so while
 # there is still time to buy another drive.
 LOW_SPACE_FRACTION = 0.10
+# Until a backup has been timed on these drives. Each copy is written to a
+# USB hard drive and read back to verify it, so a drive's ~160 MB/s halves.
+GUESSED_RATE = 80 * 1000 ** 2
+# A rate measured on less than this is mostly start-up cost, not speed.
+MEANINGFUL_SAMPLE = 1000 ** 3
+
+
+def estimate_text(bytes_to_copy: int, measured_rate: float = 0.0) -> str:
+    """How long a backup should take, and how far to trust the figure."""
+    if bytes_to_copy <= 0:
+        return ""
+    if measured_rate > 0:
+        return (f"Estimated time: about {human_duration(bytes_to_copy / measured_rate)} "
+                f"(at {human_bytes(measured_rate)}/s, the speed of the last backup).")
+    return (f"Estimated time: about {human_duration(bytes_to_copy / GUESSED_RATE)} — a rough "
+            "guess until a backup has been timed on these drives.")
 
 
 def day_sort_key(day: str) -> tuple[int, int, int]:
@@ -285,6 +303,7 @@ def run_backup(plan: BackupPlan, progress: Callable[[int, int, str], None] | Non
                 raise RuntimeError(f"Refusing to write to {root}: it is not a backup HDD.")
 
     total = plan.bytes_to_copy
+    started = time.monotonic()
     bar = ByteProgress(total, passes=3, report=progress)
     copied = already = 0
     copied_bytes = 0
@@ -321,7 +340,10 @@ def run_backup(plan: BackupPlan, progress: Callable[[int, int, str], None] | Non
                 failures.append(f"{job.relative} → {plan.names[root]}: {exc}")
     if not stopped:
         bar.finished("Done")
+    seconds = time.monotonic() - started
     return {"copied": copied, "already_there": already, "bytes": copied_bytes,
+            "seconds": seconds,
+            "rate": copied_bytes / seconds if copied_bytes >= MEANINGFUL_SAMPLE and seconds > 0 else 0.0,
             "failures": failures, "conflicts": list(plan.conflicts), "stopped": stopped}
 
 
@@ -366,7 +388,7 @@ def plan_rows(plan: BackupPlan) -> list[tuple[str, ...]]:
     return rows
 
 
-def plan_summary(plan: BackupPlan) -> str:
+def plan_summary(plan: BackupPlan, measured_rate: float = 0.0) -> str:
     blocker = plan.blocker()
     lines: list[str] = []
     waiting = [day for day in plan.days if day.missing_files]
@@ -379,6 +401,7 @@ def plan_summary(plan: BackupPlan) -> str:
     else:
         lines.append(f"{len(waiting):,} folder(s) need backing up: {plan.copies:,} file copies, "
                      f"{human_bytes(plan.bytes_to_copy)}. Footage only on the SSD goes first.")
+        lines.append(estimate_text(plan.bytes_to_copy, measured_rate))
     if plan.free and not plan.problem:
         lines.append("Free space now → after: " + ", ".join(
             f"{plan.names[root]} {human_bytes(free)} → {human_bytes(max(0, free - plan.needed.get(root, 0)))}"
@@ -395,3 +418,26 @@ def plan_summary(plan: BackupPlan) -> str:
         shown = ", ".join(loose[:4]) + (f" and {len(loose) - 4} more" if len(loose) > 4 else "")
         lines.append(f"Loose files at the top of {name}, not inside any folder, are left alone: {shown}")
     return "\n".join(lines)
+
+
+_AMOUNTS = re.compile(r"^[\d,.]+ [KMGTP]?B of [\d,.]+ [KMGTP]?B$")
+
+
+def _split_progress(text: str) -> tuple[str, str]:
+    """A ByteProgress line is "file  ·  X of Y  ·  rate  ·  time left", the
+    file being optional. Split at the amounts, which have a fixed shape —
+    a clip may well be called "Story of us.MOV"."""
+    parts = text.split("  ·  ")
+    for i, part in enumerate(parts):
+        if _AMOUNTS.match(part):
+            return "  ·  ".join(parts[:i]), "  ·  ".join(parts[i:])
+    return "", text
+
+
+def backup_progress_file(text: str) -> str:
+    label = _split_progress(text)[0]
+    return f"Copying {label}" if label and label != "Done" else ""
+
+
+def backup_progress_line(text: str) -> str:
+    return _split_progress(text)[1]

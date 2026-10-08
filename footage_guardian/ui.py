@@ -8,7 +8,13 @@ from datetime import datetime
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
-from .backup import plan_columns, plan_rows, plan_summary
+from .backup import (
+    backup_progress_file,
+    backup_progress_line,
+    plan_columns,
+    plan_rows,
+    plan_summary,
+)
 from .config import Config, Source
 from .drives import propose_drives
 from .engine import Guardian
@@ -216,6 +222,15 @@ class App(tk.Tk):
         self.backup_check = ttk.Button(buttons, text="Check again",
                                        command=lambda: self.refresh_backup_plan())
         self.backup_check.pack(side="left")
+        # The bar lives on this tab, under the button that started it. The
+        # window-wide one at the bottom was below the fold and went unseen
+        # on Kevin's first real backup.
+        self.backup_bar = ttk.Progressbar(tab, mode="determinate", maximum=100)
+        self.backup_bar.pack(fill="x", pady=(12, 2))
+        self.backup_eta = ttk.Label(tab, text="", font=("Helvetica", 13, "bold"))
+        self.backup_eta.pack(anchor="w")
+        self.backup_file = ttk.Label(tab, text="", foreground="#555")
+        self.backup_file.pack(anchor="w")
         self.backup_table = ttk.Treeview(tab, show="headings", height=9)
         self.backup_table.pack(fill="both", expand=True, pady=(12, 0))
         self.backup_result = ttk.Label(tab, text="", wraplength=880, justify="left")
@@ -267,7 +282,7 @@ class App(tk.Tk):
         self.backup_table.column(keys[-1], width=330)
         for row in plan_rows(plan):
             self.backup_table.insert("", "end", values=row)
-        self.backup_state.configure(text=plan_summary(plan))
+        self.backup_state.configure(text=plan_summary(plan, self.config_data.backup_rate))
         ready = plan.jobs and not plan.blocker()
         self.backup_button.configure(
             state="normal" if ready and not self.busy else "disabled",
@@ -625,13 +640,23 @@ class App(tk.Tk):
 
         def worker() -> None:
             try:
-                summary = guardian.backup_everything(ssd, self._progress)
+                summary = guardian.backup_everything(ssd, self._backup_progress)
                 self._post(lambda: self._backup_done(summary))
             except Exception as exc:  # noqa: BLE001 - shown to the user, never a trace
                 detail = str(exc)
                 self._post(lambda: self._backup_done({"error": detail}))
 
         threading.Thread(target=worker, daemon=True).start()
+
+    def _backup_progress(self, done: int, total: int, text: str) -> None:
+        """From the worker: hand the numbers to the Tk thread."""
+        self._post(lambda: self._show_backup_progress(done, total, text))
+
+    def _show_backup_progress(self, done: int, total: int, text: str) -> None:
+        percent = done * 100 / total if total else 0
+        self.backup_bar.configure(value=percent)
+        self.backup_eta.configure(text=f"{percent:.0f}%  ·  {backup_progress_line(text)}")
+        self.backup_file.configure(text=backup_progress_file(text))
 
     def stop_backup(self) -> None:
         if self._active_guardian is not None:
@@ -644,8 +669,13 @@ class App(tk.Tk):
         self._active_guardian = None
         self.backup_stop.configure(state="disabled")
         self.backup_check.configure(state="normal")
-        self.progress.configure(value=0)
-        self.progress_text.configure(text="")
+        self.backup_bar.configure(value=0)
+        self.backup_eta.configure(text="")
+        self.backup_file.configure(text="")
+        if summary.get("rate"):
+            # Remembered so the next estimate is for these drives, not a guess.
+            self.config_data.backup_rate = summary["rate"]
+            self.config_data.save(self.config_path)
         if "error" in summary:
             self.banner.configure(text="Nothing was copied")
             self.backup_result.configure(text=summary["error"])

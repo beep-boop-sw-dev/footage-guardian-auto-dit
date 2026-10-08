@@ -7,6 +7,10 @@ import unittest
 from pathlib import Path
 
 from footage_guardian.backup import (
+    GUESSED_RATE,
+    backup_progress_file,
+    backup_progress_line,
+    estimate_text,
     day_sort_key,
     plan_rows,
     plan_summary,
@@ -277,6 +281,54 @@ class BackupEverythingTests(unittest.TestCase):
         self.assertEqual(len(stale.jobs), 1)
         summary = guardian.backup_everything(self.ssd)
         self.assertEqual(summary["copied"], 4)
+
+
+class BackupEstimateTests(unittest.TestCase):
+    def test_before_any_timed_backup_it_says_it_is_guessing(self):
+        text = estimate_text(GUESSED_RATE * 3600 * 5)
+        self.assertIn("about 5.0 hr", text)
+        self.assertIn("rough guess", text)
+
+    def test_after_a_timed_backup_it_uses_that_speed(self):
+        text = estimate_text(100 * 10 ** 6 * 600, measured_rate=100 * 10 ** 6)
+        self.assertIn("about 10 min", text)
+        self.assertIn("speed of the last backup", text)
+        self.assertNotIn("guess", text)
+
+    def test_nothing_to_copy_means_no_estimate(self):
+        self.assertEqual(estimate_text(0), "")
+
+    def test_a_backup_reports_its_speed_only_on_a_real_sample(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            ssd, one, two = root / "S", root / "1", root / "2"
+            for d in (one, two):
+                d.mkdir()
+            write(ssd, "10-8-26/A.MOV", b"a" * 1000)
+            summary = run_backup(scan_backups(ssd, [one, two]))
+            self.assertGreater(summary["seconds"], 0)
+            self.assertEqual(summary["rate"], 0.0, "2 KB is start-up cost, not a speed")
+
+    def test_the_progress_line_splits_into_file_and_amounts(self):
+        text = "Back up HDD 2: 9:8:26/Story of us.MOV  ·  1.2 TB of 3.4 TB  ·  85.0 MB/s  ·  about 7.2 hr left"
+        self.assertEqual(backup_progress_file(text), "Copying Back up HDD 2: 9:8:26/Story of us.MOV")
+        self.assertEqual(backup_progress_line(text), "1.2 TB of 3.4 TB  ·  85.0 MB/s  ·  about 7.2 hr left")
+
+    def test_the_progress_line_without_a_file(self):
+        self.assertEqual(backup_progress_file("500.0 MB of 1.0 GB"), "")
+        self.assertEqual(backup_progress_line("500.0 MB of 1.0 GB"), "500.0 MB of 1.0 GB")
+
+    def test_a_real_run_produces_lines_that_split(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            ssd, one, two = root / "S", root / "1", root / "2"
+            for d in (one, two):
+                d.mkdir()
+            write(ssd, "10-8-26/Story of us.MOV", b"a" * 5000)
+            lines = []
+            run_backup(scan_backups(ssd, [one, two]), lambda d, t, text: lines.append(text))
+            self.assertTrue(any("Story of us.MOV" in backup_progress_file(l) for l in lines))
+            self.assertTrue(all(" of " in backup_progress_line(l) for l in lines))
 
 
 if __name__ == "__main__":

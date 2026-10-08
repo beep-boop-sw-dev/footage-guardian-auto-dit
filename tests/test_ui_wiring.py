@@ -202,5 +202,14 @@ class WindowWiringTests(unittest.TestCase):
         self.assertIsNone(self.app._active_guardian)
 
 
+    def test_backup_progress_reaches_the_tab(self) -> None:
+        self.app._show_backup_progress(
+            25, 100, "Back up HDD 1: 9:8:26/A.MOV  ·  1.0 TB of 4.0 TB  ·  80.0 MB/s  ·  about 10.4 hr left")
+        self.assertEqual(float(self.app.backup_bar.cget("value")), 25.0)
+        self.assertIn("25%", self.app.backup_eta.cget("text"))
+        self.assertIn("about 10.4 hr left", self.app.backup_eta.cget("text"))
+        self.assertIn("A.MOV", self.app.backup_file.cget("text"))
+
+
 if __name__ == "__main__":
     unittest.main()
