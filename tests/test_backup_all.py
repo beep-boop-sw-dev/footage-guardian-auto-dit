@@ -191,12 +191,49 @@ class BackupEverythingTests(unittest.TestCase):
         order = [job.relative.split("/")[0] for job in self.plan().jobs]
         self.assertEqual(order, ["10-8-26", "9-30-26", "12-1-25"])
 
-    def test_folders_that_are_not_shoot_days_are_reported_and_left_alone(self):
-        write(self.one, "D3 Youtube/7:22:26/Main Cam/A.MOV", b"nested archive")
+    def test_folders_not_named_like_dates_are_backed_up_too(self):
+        # Found on Kevin's real drives: footage only on the SSD under names
+        # the date rule skipped, and hand-typed days on one HDD only.
+        write(self.ssd, "100_PANA/P1000001.MOV", b"raw card dump" * 50)
+        write(self.ssd, "Sherman Island and deck build 8:31:26/A.MOV", b"named shoot" * 50)
+        write(self.one, "0CT:6:26/Main Cam/B.MOV", b"typed with a zero" * 50)
+        write(self.one, "oct 5:26/C.MOV", b"typed in words" * 50)
+        summary = run_backup(self.plan())
+        self.assertEqual(summary["failures"], [])
+        for relative in ("100_PANA/P1000001.MOV", "Sherman Island and deck build 8:31:26/A.MOV"):
+            self.assertTrue((self.one / relative).exists() and (self.two / relative).exists(), relative)
+        for relative in ("0CT:6:26/Main Cam/B.MOV", "oct 5:26/C.MOV"):
+            self.assertTrue((self.two / relative).exists(), relative)
+        self.assertEqual(files(self.one), files(self.two))
+
+    def test_system_folders_and_loose_files_are_left_alone(self):
+        write(self.one, "$RECYCLE.BIN/junk", b"x")
+        write(self.one, "Backups.backupdb/machine/snapshot", b"time machine")
+        write(self.one, ".Spotlight-V100/index", b"x")
+        write(self.one, "notes.txt", b"loose at the top")
         plan = self.plan()
-        self.assertEqual(plan.unhandled, {"Back up HDD 1": ["D3 Youtube"]})
         self.assertEqual(plan.jobs, [])
-        self.assertIn("Left alone on Back up HDD 1", plan_summary(plan))
+        self.assertEqual(plan.unhandled, {"Back up HDD 1": ["notes.txt"]})
+        self.assertIn("Loose files at the top of Back up HDD 1", plan_summary(plan))
+
+    def test_an_empty_folder_is_not_called_backed_up(self):
+        (self.ssd / "9-21-26").mkdir()
+        rows = plan_rows(self.plan())
+        self.assertEqual(rows[0][-1], "Empty folder — nothing to copy")
+
+    def test_named_folders_list_after_dated_ones(self):
+        write(self.ssd, "100_PANA/A.MOV", b"a")
+        write(self.ssd, "10-8-26/A.MOV", b"a")
+        write(self.ssd, "9-1-26/A.MOV", b"a")
+        self.assertEqual([d.day for d in self.plan().days], ["10-8-26", "9-1-26", "100_PANA"])
+
+    def test_it_warns_when_a_drive_will_be_nearly_full(self):
+        write(self.ssd, "10-8-26/A.MOV", b"a" * 1000)
+        plan = self.plan()
+        plan.capacity[self.one] = 8 * 10 ** 12
+        plan.free[self.one] = 500 * 10 ** 9
+        self.assertIn("Back up HDD 1 will be nearly full", plan_summary(plan))
+        self.assertIn("Free space now → after", plan_summary(plan))
 
     def test_colon_dated_folders_from_the_old_archive_count(self):
         write(self.one, "7:22:26/Main Cam/A.MOV", b"finder typed date")

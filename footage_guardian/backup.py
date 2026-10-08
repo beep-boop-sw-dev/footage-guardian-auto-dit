@@ -17,9 +17,15 @@ What it never does:
 - Delete or replace anything. A file is copied to a drive only when that
   drive has nothing at that path; if two drives hold different sizes
   under one path, neither is touched and the file is reported.
-- Touch anything outside a top-level dated folder. A real drive was
-  once found with its archive nested inside a project folder; this
-  reports such folders as not handled rather than guessing at them.
+- Touch hidden or system folders (Trash, Spotlight, Time Machine).
+
+Every top-level folder is mirrored, not only ones named like a date. The
+first look at Kevin's real drives (2026-10-08) found footage the date
+rule would have skipped: a raw `100_PANA` card folder and a "Sherman
+Island and deck build 8:31:26" shoot existing only on the SSD, and days
+typed by hand as `0CT:6:26`, `9:1026` and `oct 5:26` on one HDD only.
+Guessing dates out of names like those is how footage gets missed; a
+mirror copies what is there, under the name it has.
 
 The scan compares paths and sizes, not checksums: reading 4TB on every
 look would take hours. Everything it copies is hashed at the source and
@@ -43,15 +49,29 @@ from .progress import ByteProgress, human_bytes
 from .storage import copy_verified, md5_file, refuse_if_occupied, verified_copy_exists
 
 PART_SUFFIX = ".footage-guardian-part"
+# Folders macOS and Windows put on drives by themselves. Never footage,
+# often unreadable, and copying Time Machine's would be a disaster.
+SYSTEM_FOLDERS = {"$RECYCLE.BIN", "System Volume Information", "Backups.backupdb",
+                  "lost+found", "RECYCLER", "Recovered files"}
 # Room left on a drive after the copy, so a full disk never truncates the
 # last file and macOS keeps space for its own bookkeeping.
 FREE_SPACE_MARGIN = 2 * 1000 ** 3
+# Below this share of a drive left free after a backup, say so while
+# there is still time to buy another drive.
+LOW_SPACE_FRACTION = 0.10
 
 
 def day_sort_key(day: str) -> tuple[int, int, int]:
     """M-D-YY or M:D:YY as (year, month, day), so 12-1-25 sorts before 1-5-26."""
     month, dom, year = (int(part) for part in day.replace(":", "-").split("-"))
     return year, month, dom
+
+
+def folder_order(names) -> list[str]:
+    """Dated folders newest first, then everything else alphabetically."""
+    dated = sorted((n for n in names if DATED_FOLDER.match(n)), key=day_sort_key, reverse=True)
+    other = sorted((n for n in names if not DATED_FOLDER.match(n)), key=str.lower)
+    return dated + other
 
 
 @dataclass
@@ -88,6 +108,7 @@ class BackupPlan:
     conflicts: list[str] = field(default_factory=list)
     needed: dict[Path, int] = field(default_factory=dict)
     free: dict[Path, int] = field(default_factory=dict)
+    capacity: dict[Path, int] = field(default_factory=dict)
     missing_drives: list[str] = field(default_factory=list)
     unhandled: dict[str, list[str]] = field(default_factory=dict)
     problem: str = ""
@@ -133,17 +154,17 @@ def _same_drive(first: Path, second: Path) -> bool:
 
 
 def _index(root: Path) -> tuple[dict[str, dict[str, int]], list[str]]:
-    """Every file under each top-level dated folder, as day -> {relative: size}.
+    """Every file under each top-level folder, as folder -> {relative: size}.
 
-    Also returns the top-level folders that are not dated, so the tab can
-    say plainly that they are left alone.
+    Also returns loose files sitting at the top of the drive, which belong
+    to no folder and are left alone, so the tab can say so.
     """
     days: dict[str, dict[str, int]] = {}
     other: list[str] = []
     for item in sorted(root.iterdir(), key=lambda p: p.name):
-        if item.name.startswith(".") or not item.is_dir():
+        if item.name.startswith(".") or item.name in SYSTEM_FOLDERS:
             continue
-        if not DATED_FOLDER.match(item.name):
+        if not item.is_dir():
             other.append(item.name)
             continue
         files: dict[str, int] = {}
@@ -194,16 +215,16 @@ def scan_backups(ssd: Path | None, hdds: list[Path],
         if other:
             plan.unhandled[names[root]] = other
 
-    all_days = sorted({day for index in indexes.values() for day in index},
-                      key=day_sort_key, reverse=True)
+    all_days = folder_order({day for index in indexes.values() for day in index})
     ssd_index = indexes.get(ssd, {}) if ssd is not None else {}
 
     for root in present:
         plan.needed[root] = 0
         try:
-            plan.free[root] = shutil.disk_usage(root).free
+            usage = shutil.disk_usage(root)
+            plan.free[root], plan.capacity[root] = usage.free, usage.total
         except OSError:
-            plan.free[root] = 0
+            plan.free[root] = plan.capacity[root] = 0
 
     ssd_jobs: list[CopyJob] = []
     hdd_jobs: list[CopyJob] = []
@@ -309,7 +330,7 @@ def run_backup(plan: BackupPlan, progress: Callable[[int, int, str], None] | Non
 
 def plan_columns(plan: BackupPlan) -> list[str]:
     drives = ([plan.ssd] if plan.ssd is not None else []) + plan.hdds
-    return ["Shoot day"] + [plan.names[root] for root in drives] + ["Status"]
+    return ["Folder"] + [plan.names[root] for root in drives] + ["Status"]
 
 
 def plan_rows(plan: BackupPlan) -> list[tuple[str, ...]]:
@@ -329,7 +350,9 @@ def plan_rows(plan: BackupPlan) -> list[tuple[str, ...]]:
                 cells.append(f"{held:,} file" + ("" if held == 1 else "s"))
             else:
                 cells.append(f"{held:,} of {status.files - len(status.conflicts):,}")
-        if status.conflicts:
+        if status.files == 0:
+            state = "Empty folder — nothing to copy"
+        elif status.conflicts:
             state = f"⚠ {len(status.conflicts)} file(s) differ between drives — not copied"
         elif status.complete:
             state = "✓ On both HDDs" if status.on_ssd else "✓ On both HDDs (cleared from SSD)"
@@ -337,7 +360,7 @@ def plan_rows(plan: BackupPlan) -> list[tuple[str, ...]]:
             copies = "copy" if status.missing_files == 1 else "copies"
             state = f"Needs {status.missing_files:,} {copies}, {human_bytes(status.missing_bytes)}"
             if not status.on_ssd:
-                state += " — older footage, HDD to HDD"
+                state += " (HDD to HDD)"
         cells.append(state)
         rows.append(tuple(cells))
     return rows
@@ -350,19 +373,25 @@ def plan_summary(plan: BackupPlan) -> str:
     if blocker:
         lines.append(blocker)
     elif not plan.days:
-        lines.append("No dated shoot folders on any drive yet.")
+        lines.append("No folders on any drive yet.")
     elif not waiting:
-        lines.append(f"Both HDDs hold everything — {len(plan.days):,} shoot days checked.")
+        lines.append(f"Both HDDs hold everything — {len(plan.days):,} folders checked.")
     else:
-        lines.append(f"{len(waiting):,} shoot day(s) need backing up: {plan.copies:,} file copies, "
+        lines.append(f"{len(waiting):,} folder(s) need backing up: {plan.copies:,} file copies, "
                      f"{human_bytes(plan.bytes_to_copy)}. Footage only on the SSD goes first.")
     if plan.free and not plan.problem:
-        lines.append("Free space: " + ", ".join(
-            f"{plan.names[root]} {human_bytes(free)}" for root, free in plan.free.items()))
+        lines.append("Free space now → after: " + ", ".join(
+            f"{plan.names[root]} {human_bytes(free)} → {human_bytes(max(0, free - plan.needed.get(root, 0)))}"
+            for root, free in plan.free.items()))
+        for root, free in plan.free.items():
+            after, total = free - plan.needed.get(root, 0), plan.capacity.get(root, 0)
+            if total and 0 <= after < total * LOW_SPACE_FRACTION:
+                lines.append(f"{plan.names[root]} will be nearly full afterwards. "
+                             "Talk to Stuart about bigger or extra drives before the next shoot.")
     if plan.conflicts:
         lines.append(f"{len(plan.conflicts)} file(s) have different sizes on different drives. "
                      "They are left exactly as they are — tell Stuart before anything is done about them.")
-    for name, folders in plan.unhandled.items():
-        shown = ", ".join(folders[:4]) + (f" and {len(folders) - 4} more" if len(folders) > 4 else "")
-        lines.append(f"Left alone on {name} (not a dated shoot folder): {shown}")
+    for name, loose in plan.unhandled.items():
+        shown = ", ".join(loose[:4]) + (f" and {len(loose) - 4} more" if len(loose) > 4 else "")
+        lines.append(f"Loose files at the top of {name}, not inside any folder, are left alone: {shown}")
     return "\n".join(lines)

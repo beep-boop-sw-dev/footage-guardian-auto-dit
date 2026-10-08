@@ -283,9 +283,16 @@ whatever any HDD lacks, verified, SSD-only footage first. The SSD is 4TB
 and the HDDs 8TB, so older days live only on the HDDs: they are never
 deleted, never copied back to the SSD, and are copied HDD-to-HDD so both
 HDDs end up mirrors (Stuart's call). A path whose size differs between
-drives is reported and left alone. Non-dated top-level folders are listed
-as left alone — the real HDD layout has not been seen yet, and an archive
-was once found nested inside a project folder. The scan is path+size only;
+drives is reported and left alone.
+
+**Every top-level folder is mirrored, not only date-named ones.** The first
+scan of Kevin's real drives found footage the date rule skipped: `100_PANA`
+and "Sherman Island and deck build 8:31:26" only on the SSD, and days typed
+`0CT:6:26`, `9:1026`, `oct 5:26` on one HDD only. Do not go back to
+guessing dates from folder names for backup. Hidden and system folders
+(Trash, Spotlight, Time Machine) are skipped; loose top-level files are
+reported and left alone. His HDDs are ~6 TB and ~4 TB used of 8 TB; once
+mirrored, roughly 1 TB each will be left, and the tab warns below 10%. The scan is path+size only;
 a deep checksum comparison of the two HDDs is a possible follow-up.
 
 ## How Kevin actually works (2026-09-16)

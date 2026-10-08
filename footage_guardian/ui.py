@@ -197,9 +197,9 @@ class App(tk.Tk):
         self.backup_tab = tab
         self.tabs.add(tab, text="  2 · Back up to HDDs  ")
         ttk.Label(tab, wraplength=880, justify="left", text=(
-            "Plug in both backup HDDs. This checks every shoot day on the SSD and both HDDs, "
-            "then copies whatever is missing so both HDDs hold everything. Older days that are "
-            "only on the HDDs are kept and evened up between them. Nothing is ever deleted, "
+            "Plug in both backup HDDs. This checks every folder on the SSD and both HDDs, "
+            "then copies whatever is missing so both HDDs hold everything. Older footage that is "
+            "only on the HDDs is kept and evened up between them. Nothing is ever deleted, "
             "and every file is checked by size and checksum as it lands."
         )).pack(anchor="w")
         self.backup_state = ttk.Label(tab, text="Checking the drives…", wraplength=880,
