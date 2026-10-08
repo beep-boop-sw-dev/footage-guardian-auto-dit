@@ -140,7 +140,7 @@ class StatusSnapshotTests(unittest.TestCase):
 
     def test_no_ssd_asks_for_one(self) -> None:
         snapshot = status_snapshot(None, "", [], self.manifest)
-        self.assertIn("Set the SSD main drive", snapshot["message"])
+        self.assertIn("press Confirm these drives", snapshot["message"])
 
     def test_an_unplugged_hdd_is_named_and_nothing_is_claimed(self) -> None:
         ssd = self.root / "ssd"

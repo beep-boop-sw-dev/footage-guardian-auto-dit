@@ -105,7 +105,8 @@ class BackupPlan:
         if self.problem:
             return self.problem
         if not self.hdds:
-            return "Set Back up HDD 1 and Back up HDD 2 on the Drives tab first."
+            return ("No backup HDDs are saved yet. Open the Drives tab, check the three drives "
+                    "and press Confirm these drives.")
         if self.missing_drives:
             return (f"Plug in {' and '.join(self.missing_drives)}. Nothing is copied "
                     f"until every backup HDD is connected, so they stay mirrors.")

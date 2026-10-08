@@ -130,6 +130,10 @@ class BackupEverythingTests(unittest.TestCase):
             run_backup(plan)
         self.assertEqual(files(self.one), set())
 
+    def test_with_no_hdds_saved_it_says_which_button_to_press(self):
+        plan = scan_backups(self.ssd, [])
+        self.assertIn("press Confirm these drives", plan.blocker())
+
     def test_it_refuses_up_front_when_a_drive_is_too_full(self):
         write(self.ssd, "10-8-26/360/A.insv", b"a" * 100)
         plan = self.plan()

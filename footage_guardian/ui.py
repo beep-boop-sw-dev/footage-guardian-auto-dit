@@ -37,7 +37,7 @@ def status_snapshot(root: Path | None, day: str, roots: list[Path],
     worker thread, and being a plain function it can be tested without a screen.
     """
     if root is None:
-        return {"message": "Set the SSD main drive on the Drives tab to begin.",
+        return {"message": "Open the Drives tab, check the three drives and press Confirm these drives.",
                 "backup_state": "No SSD main drive is set yet.",
                 "sync_state": "No SSD main drive is set yet."}
     if not day:
@@ -416,6 +416,7 @@ class App(tk.Tk):
         self.config_data.google_destination = self.remote_var.get().strip()
         self.config_data.save(self.config_path)
         self.refresh_days()
+        self.refresh_backup_plan()
         # The SSD is kept out of the plugged-in list, so naming a different one
         # changes what belongs there.
         self.refresh_devices(force=True)
