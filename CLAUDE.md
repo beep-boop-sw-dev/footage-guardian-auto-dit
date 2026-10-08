@@ -299,6 +299,18 @@ reported and left alone. His HDDs are ~6 TB and ~4 TB used of 8 TB; once
 mirrored, roughly 1 TB each will be left, and the tab warns below 10%. The scan is path+size only;
 a deep checksum comparison of the two HDDs is a possible follow-up.
 
+## Sync tab works across every folder (2026-10-08)
+Stage three no longer uploads one day from the SSD. `cloud_sync.scan_cloud`
+lists the whole Drive master folder in one rclone call and compares it with
+every top-level folder on the SSD and both HDDs; one button uploads what
+Drive lacks, SSD read in preference, newest folder first, stopping before the
+quota. Each upload is verified against Google's MD5. Rules: local drives are
+only read; nothing in Drive is replaced (`--ignore-existing` on every upload —
+before it, rclone replaced a differing file); size clashes and Drive-side
+duplicates are reported and left; a master folder that does not exist is
+refused, never created. The master folder is set on the Drives tab and its
+name stays out of this repo (see HANDOVER.md).
+
 ## How Kevin actually works (2026-09-16)
 Three deliberate stages, in order, each a button he presses:
 
@@ -315,8 +327,10 @@ Three deliberate stages, in order, each a button he presses:
 - **Main Cam cards are sequential, not simultaneous** — card 1 fills, he swaps
   to card 2. The two hold *different* footage and must never be merged.
 - **Drive naming he uses:** SSD main drive, Back up HDD 1, Back up HDD 2.
-- **Google Drive** is a Workspace plan with room to spare; storage limits are not
-  a design constraint.
+- **Google Drive is a constraint.** Checked 2026-10-08: 5 TiB total, 3.5 TB
+  free — smaller than the HDD archive (~6-7 TB). The earlier note here that
+  storage "is not a design constraint" was wrong. The Sync tab reads the real
+  quota and uploads newest-first until it is full.
 - **Meta glasses and phone** have no route in yet. He has never offloaded any
   glasses footage. They reach the Meta app and his phone, neither of which
   mounts as a drive.

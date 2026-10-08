@@ -28,6 +28,8 @@ class Config:
     # Footage bytes landed per second on the last sizeable backup, so the
     # Back up tab can estimate how long the next one takes on these drives.
     backup_rate: float = 0.0
+    # The same for uploads. Almost entirely the internet connection's speed.
+    sync_rate: float = 0.0
     video_extensions: list[str] = field(default_factory=lambda: [
         ".mp4", ".mov", ".mxf", ".mts", ".m2ts", ".avi", ".braw", ".r3d",
         ".crm", ".ari", ".wav", ".mp3", ".jpg", ".jpeg", ".png", ".xml",

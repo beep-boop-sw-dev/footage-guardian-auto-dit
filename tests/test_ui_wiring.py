@@ -211,5 +211,36 @@ class WindowWiringTests(unittest.TestCase):
         self.assertIn("A.MOV", self.app.backup_file.cget("text"))
 
 
+    def _cloud_plan(self, folder_exists: bool = True):
+        from footage_guardian.cloud_sync import scan_cloud
+        from tests.test_cloud_sync import FolderCloud
+        ssd = self.root / "SSD"
+        clip = ssd / "10-8-26" / "A.MOV"
+        clip.parent.mkdir(parents=True)
+        clip.write_bytes(b"a" * 100)
+        drive = self.root / "Drive" / "Master"
+        if folder_exists:
+            drive.mkdir(parents=True)
+        return scan_cloud(FolderCloud(drive), "gdrive:Master", ssd, [])
+
+    def test_the_sync_table_fills_and_the_button_comes_on(self) -> None:
+        self.app._cloud_ready(self._cloud_plan())
+        rows = [self.app.sync_table.item(i)["values"] for i in self.app.sync_table.get_children()]
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(str(self.app.sync_button.cget("state")), "normal")
+        self.assertIn("Uploading to: gdrive:Master", self.app.sync_state.cget("text"))
+
+    def test_a_missing_drive_folder_keeps_the_upload_button_off(self) -> None:
+        self.app._cloud_ready(self._cloud_plan(folder_exists=False))
+        self.assertEqual(str(self.app.sync_button.cget("state")), "disabled")
+        self.assertIn("There is no folder called", self.app.sync_state.cget("text"))
+
+    def test_upload_progress_reaches_the_tab(self) -> None:
+        self.app._show_sync_progress(
+            50, 100, "10-8-26/A.MOV  ·  1.0 GB of 2.0 GB  ·  40.0 MB/s  ·  about 25 sec left")
+        self.assertIn("50%", self.app.sync_eta.cget("text"))
+        self.assertEqual(self.app.sync_file.cget("text"), "Uploading 10-8-26/A.MOV")
+
+
 if __name__ == "__main__":
     unittest.main()

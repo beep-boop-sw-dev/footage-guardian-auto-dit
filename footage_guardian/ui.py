@@ -8,6 +8,7 @@ from datetime import datetime
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
+from .cloud_sync import cloud_columns, cloud_rows, cloud_summary
 from .backup import (
     backup_progress_file,
     backup_progress_line,
@@ -113,6 +114,7 @@ class App(tk.Tk):
         # both HDDs, so it runs on demand — opening the tab, a drive coming
         # or going, Check again — never on the four-second timer.
         self._plan_scan = False
+        self._cloud_scan = False
         self._active_guardian: Guardian | None = None
         self._device_signature: tuple[str, ...] | None = None
         # Tk may only be touched from the thread running the main loop, so the
@@ -244,6 +246,11 @@ class App(tk.Tk):
             return
         if on_backup:
             self.refresh_backup_plan()
+        try:
+            if self.tabs.select() == str(self.sync_tab):
+                self.refresh_sync_plan()
+        except tk.TclError:
+            pass
 
     def refresh_backup_plan(self) -> None:
         """Look at every drive and fill the table, off the main thread."""
@@ -291,18 +298,37 @@ class App(tk.Tk):
 
     def _build_sync_tab(self) -> None:
         tab = ttk.Frame(self.tabs, padding=16)
+        self.sync_tab = tab
         self.tabs.add(tab, text="  3 · Sync to Google Drive  ")
         ttk.Label(tab, wraplength=880, justify="left", text=(
-            "With the day safely on both backup HDDs, upload it to Google Drive. Drive ends up "
-            "mirroring the SSD folder for folder, and every upload is checked against Google's "
-            "own checksum. Stopping and restarting is safe — it never re-uploads a file."
+            "Uploads everything on the SSD and backup HDDs that is not in Google Drive yet, newest "
+            "first, into one master folder that mirrors the drives folder for folder. Every upload "
+            "is checked against Google's own checksum. Nothing in Drive is ever replaced or deleted."
         )).pack(anchor="w")
-        self.sync_state = ttk.Label(tab, text="", wraplength=880, justify="left", font=("Helvetica", 12))
+        self.sync_state = ttk.Label(tab, text="Open this tab to check Google Drive.", wraplength=880,
+                                    justify="left", font=("Helvetica", 12))
         self.sync_state.pack(anchor="w", pady=(12, 10))
-        self.sync_button = ttk.Button(tab, text="Upload this day to Google Drive", command=self.start_sync)
-        self.sync_button.pack(anchor="w")
+        buttons = ttk.Frame(tab)
+        buttons.pack(anchor="w", fill="x")
+        self.sync_button = ttk.Button(buttons, text="Upload everything missing",
+                                      command=self.start_sync, state="disabled")
+        self.sync_button.pack(side="left")
+        self.sync_stop = ttk.Button(buttons, text="Stop after this file",
+                                    command=self.stop_sync, state="disabled")
+        self.sync_stop.pack(side="left", padx=8)
+        self.sync_check = ttk.Button(buttons, text="Check again",
+                                     command=lambda: self.refresh_sync_plan())
+        self.sync_check.pack(side="left")
+        self.sync_bar = ttk.Progressbar(tab, mode="determinate", maximum=100)
+        self.sync_bar.pack(fill="x", pady=(12, 2))
+        self.sync_eta = ttk.Label(tab, text="", font=("Helvetica", 13, "bold"))
+        self.sync_eta.pack(anchor="w")
+        self.sync_file = ttk.Label(tab, text="", foreground="#555")
+        self.sync_file.pack(anchor="w")
+        self.sync_table = ttk.Treeview(tab, show="headings", height=7)
+        self.sync_table.pack(fill="both", expand=True, pady=(10, 0))
         self.sync_result = ttk.Label(tab, text="", wraplength=880, justify="left")
-        self.sync_result.pack(anchor="w", pady=(14, 0))
+        self.sync_result.pack(anchor="w", pady=(10, 0))
 
         ttk.Separator(tab).pack(fill="x", pady=16)
         ttk.Label(tab, wraplength=880, justify="left", text=(
@@ -489,9 +515,8 @@ class App(tk.Tk):
             self.banner.configure(text=snapshot["message"])
             for label in self.stage_labels.values():
                 label.configure(text=STAGE_NONE)
-            # The Back up tab reports its own all-days check; this per-day
-            # line used to overwrite it every four seconds.
-            self.sync_state.configure(text=snapshot["sync_state"])
+            # The Back up and Sync tabs report their own all-folder checks;
+            # this per-day line used to overwrite them every four seconds.
             return
 
         files, day = snapshot["files"], snapshot["day"]
@@ -520,9 +545,6 @@ class App(tk.Tk):
         else:
             drive_mark, drive_text = STAGE_NONE, "not started"
         self.stage_labels["drive"].configure(text=f"{drive_mark}   {drive_text}")
-        self.sync_state.configure(
-            text=f"{day}: {files:,} files on the SSD, {synced:,} verified in Google Drive."
-            if files else "Nothing to upload for this day.")
         if not self.busy:
             self.banner.configure(text="")
 
@@ -545,6 +567,8 @@ class App(tk.Tk):
                 self._apply_status(payload)
             elif kind == "plan":
                 self._plan_ready(payload)
+            elif kind == "cloud":
+                self._cloud_ready(payload)
 
     def _post(self, callback) -> None:
         """Hand work back to the Tk thread, tolerating a closed window.
@@ -697,61 +721,128 @@ class App(tk.Tk):
         self.refresh_backup_plan()
         self.refresh_status()
 
-    def start_sync(self) -> None:
-        self._run_stage("sync", self.sync_button, self.sync_result,
-                        lambda guardian, root, day: guardian.sync_day(root, day, self._progress),
-                        lambda s: (f"Uploaded {s['uploaded']:,} files; "
-                                   f"{s['already_there']:,} were already in Drive."))
+    def refresh_sync_plan(self) -> None:
+        """Compare the drives with Google Drive, off the main thread.
 
-    def _run_stage(self, name: str, button: ttk.Button, result: ttk.Label, work, describe) -> None:
-        if self._busy_warning():
+        This one goes online — a listing of the whole Drive folder and the
+        account's free space — so it runs when the tab is opened or Check
+        again is pressed, never on a timer or when a drive is plugged in.
+        """
+        if self._cloud_scan or self.busy:
             return
-        root, day = self.ssd_root(), self.day.get()
-        if root is None or not day:
-            messagebox.showinfo("Nothing selected", "Choose a shoot day first.", parent=self)
-            return
-        self.busy = True
-        button.configure(state="disabled")
-        result.configure(text="")
-        self.banner.configure(text=f"Working on {day}…")
+        self._cloud_scan = True
+        self.sync_check.configure(state="disabled")
+        self.sync_button.configure(state="disabled")
+        self.sync_state.configure(text="Checking Google Drive against your drives…")
+        ssd = self.ssd_root()
+        guardian = self.guardian()
 
         def worker() -> None:
             try:
-                summary = work(self.guardian(), root, day)
-                self.after(0, lambda: self._stage_done(button, result, summary, describe))
-            except Exception as exc:  # noqa: BLE001 - shown to the user, never a trace
-                self.after(0, lambda: self._stage_failed(button, result, str(exc)))
+                plan = guardian.plan_sync(ssd)
+            except Exception as exc:  # noqa: BLE001 - shown, never a trace
+                plan = exc
+            self._results.put(("cloud", plan))
 
         threading.Thread(target=worker, daemon=True).start()
 
-    def _stage_done(self, button: ttk.Button, result: ttk.Label, summary: dict, describe) -> None:
+    def _cloud_ready(self, plan) -> None:
+        self._cloud_scan = False
+        self.sync_check.configure(state="normal")
+        for item in self.sync_table.get_children():
+            self.sync_table.delete(item)
+        if isinstance(plan, Exception):
+            self.sync_state.configure(text=f"Google Drive could not be checked: {plan}")
+            self.sync_button.configure(state="disabled")
+            return
+        keys = ("c0", "c1", "c2", "c3")
+        self.sync_table.configure(columns=keys)
+        for key, title, width in zip(keys, cloud_columns(), (130, 140, 140, 450)):
+            self.sync_table.heading(key, text=title.upper())
+            self.sync_table.column(key, width=width, stretch=True)
+        for row in cloud_rows(plan):
+            self.sync_table.insert("", "end", values=row)
+        self.sync_state.configure(text=cloud_summary(plan, self.config_data.sync_rate))
+        ready = plan.jobs and not plan.blocker()
+        self.sync_button.configure(
+            state="normal" if ready and not self.busy else "disabled",
+            text=(f"Upload everything missing ({_human(plan.bytes_to_upload)})" if plan.jobs
+                  else "Upload everything missing"))
+
+    def start_sync(self) -> None:
+        if self._busy_warning():
+            return
+        self.busy = True
+        self.sync_button.configure(state="disabled")
+        self.sync_check.configure(state="disabled")
+        self.sync_stop.configure(state="normal")
+        self.sync_result.configure(text="")
+        self.banner.configure(text="Uploading to Google Drive…")
+        guardian = self.guardian()
+        self._active_guardian = guardian
+        ssd = self.ssd_root()
+
+        def worker() -> None:
+            try:
+                summary = guardian.sync_everything(ssd, self._sync_progress)
+                self._post(lambda: self._sync_done(summary))
+            except Exception as exc:  # noqa: BLE001 - shown to the user, never a trace
+                detail = str(exc)
+                self._post(lambda: self._sync_done({"error": detail}))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _sync_progress(self, done: int, total: int, text: str) -> None:
+        self._post(lambda: self._show_sync_progress(done, total, text))
+
+    def _show_sync_progress(self, done: int, total: int, text: str) -> None:
+        percent = done * 100 / total if total else 0
+        self.sync_bar.configure(value=percent)
+        self.sync_eta.configure(text=f"{percent:.0f}%  ·  {backup_progress_line(text)}")
+        label = backup_progress_file(text)
+        self.sync_file.configure(text=label.replace("Copying ", "Uploading ", 1))
+
+    def stop_sync(self) -> None:
+        if self._active_guardian is not None:
+            self._active_guardian.stop()
+            self.sync_stop.configure(state="disabled")
+            self.banner.configure(text="Stopping after the file being uploaded…")
+
+    def _sync_done(self, summary: dict) -> None:
         self.busy = False
-        button.configure(state="normal")
-        self.progress.configure(value=0)
-        self.progress_text.configure(text="")
-        failures = summary.get("failures", [])
-        if failures:
-            self.banner.configure(text=f"{len(failures)} file(s) had a problem")
-            shown = "\n".join(f"  • {item}" for item in failures[:6])
-            more = f"\n  … and {len(failures) - 6} more" if len(failures) > 6 else ""
-            result.configure(text=f"{describe(summary)}\n\nThese did not complete:\n{shown}{more}")
+        self._active_guardian = None
+        self.sync_stop.configure(state="disabled")
+        self.sync_check.configure(state="normal")
+        self.sync_bar.configure(value=0)
+        self.sync_eta.configure(text="")
+        self.sync_file.configure(text="")
+        if summary.get("rate"):
+            self.config_data.sync_rate = summary["rate"]
+            self.config_data.save(self.config_path)
+        if "error" in summary:
+            self.banner.configure(text="Nothing was uploaded")
+            self.sync_result.configure(text=summary["error"])
         else:
-            self.banner.configure(text="Done")
-            result.configure(text=describe(summary) + "\nEvery file was verified.")
+            failures = summary["failures"]
+            text = (f"{summary['uploaded']:,} files uploaded and verified in Google Drive "
+                    f"({_human(summary['bytes'])}).")
+            if summary["stopped"]:
+                self.banner.configure(text="Stopped")
+                text += " Stopped before the end — press the button again to carry on."
+            elif failures:
+                self.banner.configure(text=f"{len(failures)} file(s) had a problem")
+                shown = "\n".join(f"  • {item}" for item in failures[:6])
+                more = f"\n  … and {len(failures) - 6} more" if len(failures) > 6 else ""
+                text += f"\n\nThese did not complete:\n{shown}{more}"
+            elif summary.get("not_fitting"):
+                self.banner.configure(text="Google Drive is full")
+                text += (f" {summary['not_fitting']:,} files did not fit and are still only on "
+                         "your drives.")
+            else:
+                self.banner.configure(text="Done — Google Drive is up to date")
+            self.sync_result.configure(text=text)
+        self.refresh_sync_plan()
         self.refresh_status()
-
-    def _stage_failed(self, button: ttk.Button, result: ttk.Label, detail: str) -> None:
-        self.busy = False
-        button.configure(state="normal")
-        self.progress.configure(value=0)
-        self.progress_text.configure(text="")
-        self.banner.configure(text="Stopped")
-        result.configure(text=detail)
-
-    def _progress(self, done: int, total: int, text: str) -> None:
-        percent = (done / total * 100) if total else 0
-        self.after(0, lambda: (self.progress.configure(value=percent),
-                               self.progress_text.configure(text=text)))
 
     # ----------------------------------------------------------------- dialogs
 

@@ -9,6 +9,7 @@ from pathlib import Path, PurePosixPath
 from typing import Callable
 
 from .backup import BackupPlan, run_backup, scan_backups
+from .cloud_sync import CloudPlan, run_sync, scan_cloud
 from .config import Config, Source
 from .ingest import (
     DATED_FOLDER,
@@ -327,6 +328,26 @@ class Guardian:
             self._event("ERROR", f"Backup: {len(summary['failures'])} copy(ies) failed")
         self._event("INFO", f"Backup: {summary['copied']} copies made and verified, "
                             f"{summary['already_there']} already present"
+                            + (", stopped early" if summary["stopped"] else ""))
+        return summary
+
+    def plan_sync(self, ssd: Path | None) -> CloudPlan:
+        """What is on the drives, what is in Google Drive, and what fits."""
+        return scan_cloud(self.cloud, self.config.google_destination, ssd, self.config.backup_roots())
+
+    def sync_everything(self, ssd: Path | None,
+                        progress: Callable[[int, int, str], None] | None = None) -> dict:
+        """Stage three for every folder at once. See cloud_sync.py for the rules.
+
+        Re-scans first: Drive and the drives may have changed since the
+        window last looked, and the quota certainly has.
+        """
+        self.stop_event.clear()
+        plan = self.plan_sync(ssd)
+        summary = run_sync(plan, self.cloud, self.manifest, progress, self.stop_event)
+        if summary["failures"]:
+            self._event("ERROR", f"Upload: {len(summary['failures'])} file(s) did not reach Google Drive")
+        self._event("INFO", f"Upload: {summary['uploaded']} files uploaded and verified"
                             + (", stopped early" if summary["stopped"] else ""))
         return summary
 
