@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 from typing import Callable
 
+from .backup import BackupPlan, run_backup, scan_backups
 from .config import Config, Source
 from .ingest import (
     DATED_FOLDER,
@@ -306,6 +307,27 @@ class Guardian:
         else:
             self._event("INFO", f"{day} backed up to {len(roots)} drive(s): "
                                 f"{copied} copied, {already} already present")
+        return summary
+
+    def plan_backups(self, ssd: Path | None) -> BackupPlan:
+        """What is on the SSD and both HDDs, and what still needs copying."""
+        return scan_backups(ssd, self.config.backup_roots())
+
+    def backup_everything(self, ssd: Path | None,
+                          progress: Callable[[int, int, str], None] | None = None) -> dict:
+        """Stage two for every day at once. See backup.py for the rules.
+
+        Re-scans first rather than trusting what the window last showed:
+        drives may have been swapped or written to since.
+        """
+        self.stop_event.clear()
+        plan = self.plan_backups(ssd)
+        summary = run_backup(plan, progress, self.stop_event)
+        if summary["failures"]:
+            self._event("ERROR", f"Backup: {len(summary['failures'])} copy(ies) failed")
+        self._event("INFO", f"Backup: {summary['copied']} copies made and verified, "
+                            f"{summary['already_there']} already present"
+                            + (", stopped early" if summary["stopped"] else ""))
         return summary
 
     def sync_day(self, source_root: Path, day: str,

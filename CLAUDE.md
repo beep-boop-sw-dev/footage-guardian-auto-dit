@@ -276,6 +276,18 @@ touching the network.
 Out of scope for now: notifications for anything but a finished transfer,
 and any notification carrying detail about the work.
 
+## Back up tab works across every day (2026-10-08)
+Stage two no longer asks for a shoot day. `backup.scan_backups` compares
+every top-level dated folder on the SSD and both HDDs; one button copies
+whatever any HDD lacks, verified, SSD-only footage first. The SSD is 4TB
+and the HDDs 8TB, so older days live only on the HDDs: they are never
+deleted, never copied back to the SSD, and are copied HDD-to-HDD so both
+HDDs end up mirrors (Stuart's call). A path whose size differs between
+drives is reported and left alone. Non-dated top-level folders are listed
+as left alone — the real HDD layout has not been seen yet, and an archive
+was once found nested inside a project folder. The scan is path+size only;
+a deep checksum comparison of the two HDDs is a possible follow-up.
+
 ## How Kevin actually works (2026-09-16)
 Three deliberate stages, in order, each a button he presses:
 

@@ -160,5 +160,47 @@ class WindowWiringTests(unittest.TestCase):
         self.assertIn("could not be read", rows[0][2])
 
 
+    def _plan(self, plugged_in: bool = True):
+        from footage_guardian.backup import scan_backups
+        ssd, one, two = (self.root / n for n in ("SSD", "HDD1", "HDD2"))
+        clip = ssd / "10-8-26" / "360" / "A.insv"
+        clip.parent.mkdir(parents=True)
+        clip.write_bytes(b"a" * 100)
+        one.mkdir()
+        if plugged_in:
+            two.mkdir()
+        return scan_backups(ssd, [one, two])
+
+    def test_the_backup_table_fills_and_the_button_comes_on(self) -> None:
+        self.app._plan_ready(self._plan())
+        rows = [self.app.backup_table.item(i)["values"]
+                for i in self.app.backup_table.get_children()]
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(str(self.app.backup_button.cget("state")), "normal")
+        self.assertIn("need backing up", self.app.backup_state.cget("text"))
+
+    def test_a_missing_hdd_keeps_the_backup_button_off(self) -> None:
+        self.app._plan_ready(self._plan(plugged_in=False))
+        self.assertEqual(str(self.app.backup_button.cget("state")), "disabled")
+        self.assertIn("Plug in", self.app.backup_state.cget("text"))
+
+    def test_the_status_timer_does_not_overwrite_the_backup_summary(self) -> None:
+        self.app._plan_ready(self._plan())
+        self.app._apply_status({"message": "x", "backup_state": "old per-day line",
+                                "sync_state": "y"})
+        self.assertNotIn("old per-day line", self.app.backup_state.cget("text"))
+
+    def test_a_backup_cannot_start_while_another_job_runs(self) -> None:
+        self.app._plan_ready(self._plan())
+        self.app.busy = True
+        original = ui.messagebox.showinfo
+        ui.messagebox.showinfo = lambda *a, **k: None
+        try:
+            self.app.start_backup()
+        finally:
+            ui.messagebox.showinfo = original
+        self.assertIsNone(self.app._active_guardian)
+
+
 if __name__ == "__main__":
     unittest.main()

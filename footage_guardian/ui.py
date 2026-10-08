@@ -8,6 +8,7 @@ from datetime import datetime
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
+from .backup import plan_columns, plan_rows, plan_summary
 from .config import Config, Source
 from .drives import propose_drives
 from .engine import Guardian
@@ -102,6 +103,11 @@ class App(tk.Tk):
         self._device_scan = False
         self._status_scan = False
         self._device_rescan = False
+        # The Back up tab's look across every drive. It walks the SSD and
+        # both HDDs, so it runs on demand — opening the tab, a drive coming
+        # or going, Check again — never on the four-second timer.
+        self._plan_scan = False
+        self._active_guardian: Guardian | None = None
         self._device_signature: tuple[str, ...] | None = None
         # Tk may only be touched from the thread running the main loop, so the
         # scans post their results here and the main thread collects them.
@@ -188,21 +194,85 @@ class App(tk.Tk):
 
     def _build_backup_tab(self) -> None:
         tab = ttk.Frame(self.tabs, padding=16)
+        self.backup_tab = tab
         self.tabs.add(tab, text="  2 · Back up to HDDs  ")
         ttk.Label(tab, wraplength=880, justify="left", text=(
-            "Once every camera has been copied onto the SSD main drive, plug in both backup "
-            "HDDs and copy the whole day onto each. Every file is checked by size and checksum "
-            "as it lands. Running it again only copies what is missing."
+            "Plug in both backup HDDs. This checks every shoot day on the SSD and both HDDs, "
+            "then copies whatever is missing so both HDDs hold everything. Older days that are "
+            "only on the HDDs are kept and evened up between them. Nothing is ever deleted, "
+            "and every file is checked by size and checksum as it lands."
         )).pack(anchor="w")
-        self.backup_state = ttk.Label(tab, text="", wraplength=880, justify="left",
-                                      font=("Helvetica", 12))
+        self.backup_state = ttk.Label(tab, text="Checking the drives…", wraplength=880,
+                                      justify="left", font=("Helvetica", 12))
         self.backup_state.pack(anchor="w", pady=(12, 10))
-        self.backup_button = ttk.Button(
-            tab, text="All cameras are on the SSD — back this day up to both HDDs",
-            command=self.start_backup)
-        self.backup_button.pack(anchor="w")
+        buttons = ttk.Frame(tab)
+        buttons.pack(anchor="w", fill="x")
+        self.backup_button = ttk.Button(buttons, text="Back up everything missing",
+                                        command=self.start_backup, state="disabled")
+        self.backup_button.pack(side="left")
+        self.backup_stop = ttk.Button(buttons, text="Stop after this file",
+                                      command=self.stop_backup, state="disabled")
+        self.backup_stop.pack(side="left", padx=8)
+        self.backup_check = ttk.Button(buttons, text="Check again",
+                                       command=lambda: self.refresh_backup_plan())
+        self.backup_check.pack(side="left")
+        self.backup_table = ttk.Treeview(tab, show="headings", height=9)
+        self.backup_table.pack(fill="both", expand=True, pady=(12, 0))
         self.backup_result = ttk.Label(tab, text="", wraplength=880, justify="left")
-        self.backup_result.pack(anchor="w", pady=(14, 0))
+        self.backup_result.pack(anchor="w", pady=(10, 0))
+        self.tabs.bind("<<NotebookTabChanged>>", self._tab_changed)
+
+    def _tab_changed(self, _event=None) -> None:
+        try:
+            on_backup = self.tabs.select() == str(self.backup_tab)
+        except tk.TclError:
+            return
+        if on_backup:
+            self.refresh_backup_plan()
+
+    def refresh_backup_plan(self) -> None:
+        """Look at every drive and fill the table, off the main thread."""
+        if self._plan_scan or self.busy:
+            return
+        self._plan_scan = True
+        self.backup_check.configure(state="disabled")
+        self.backup_state.configure(text="Checking the SSD and both HDDs…")
+        ssd = self.ssd_root()
+        guardian = self.guardian()
+
+        def worker() -> None:
+            try:
+                plan = guardian.plan_backups(ssd)
+            except Exception as exc:  # noqa: BLE001 - shown, never a trace
+                plan = exc
+            self._results.put(("plan", plan))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _plan_ready(self, plan) -> None:
+        self._plan_scan = False
+        self.backup_check.configure(state="normal")
+        for item in self.backup_table.get_children():
+            self.backup_table.delete(item)
+        if isinstance(plan, Exception):
+            self.backup_state.configure(text=f"The drives could not be read: {plan}")
+            self.backup_button.configure(state="disabled")
+            return
+        columns = plan_columns(plan)
+        keys = [f"c{i}" for i in range(len(columns))]
+        self.backup_table.configure(columns=keys)
+        for key, title in zip(keys, columns):
+            self.backup_table.heading(key, text=title.upper())
+            self.backup_table.column(key, width=110 if key == "c0" else 150, stretch=True)
+        self.backup_table.column(keys[-1], width=330)
+        for row in plan_rows(plan):
+            self.backup_table.insert("", "end", values=row)
+        self.backup_state.configure(text=plan_summary(plan))
+        ready = plan.jobs and not plan.blocker()
+        self.backup_button.configure(
+            state="normal" if ready and not self.busy else "disabled",
+            text=(f"Back up everything missing ({_human(plan.bytes_to_copy)})" if plan.jobs
+                  else "Back up everything missing"))
 
     def _build_sync_tab(self) -> None:
         tab = ttk.Frame(self.tabs, padding=16)
@@ -403,7 +473,8 @@ class App(tk.Tk):
             self.banner.configure(text=snapshot["message"])
             for label in self.stage_labels.values():
                 label.configure(text=STAGE_NONE)
-            self.backup_state.configure(text=snapshot["backup_state"])
+            # The Back up tab reports its own all-days check; this per-day
+            # line used to overwrite it every four seconds.
             self.sync_state.configure(text=snapshot["sync_state"])
             return
 
@@ -422,7 +493,6 @@ class App(tk.Tk):
             backup_text = " and ".join(f"{count:,}" for count in counts) + f" of {files:,} files"
             backup_mark = STAGE_PART if any(counts) else STAGE_NONE
         self.stage_labels["backup"].configure(text=f"{backup_mark}   {backup_text}")
-        self.backup_state.configure(text=snapshot["backup_state"])
 
         synced = snapshot["synced"]
         if not files:
@@ -457,6 +527,8 @@ class App(tk.Tk):
                 self._devices_ready(payload)
             elif kind == "status":
                 self._apply_status(payload)
+            elif kind == "plan":
+                self._plan_ready(payload)
 
     def _post(self, callback) -> None:
         """Hand work back to the Tk thread, tolerating a closed window.
@@ -526,6 +598,7 @@ class App(tk.Tk):
 
     def _devices_ready(self, rows: list[tuple[str, str, str]]) -> None:
         self._device_scan = False
+        self.refresh_backup_plan()
         for item in self.devices.get_children():
             self.devices.delete(item)
         for row in rows:
@@ -537,10 +610,61 @@ class App(tk.Tk):
     # ------------------------------------------------------------ the stages
 
     def start_backup(self) -> None:
-        self._run_stage("backup", self.backup_button, self.backup_result,
-                        lambda guardian, root, day: guardian.backup_day(root, day, self._progress),
-                        lambda s: (f"Copied {s['copied']:,} files onto {s['drives']} HDD(s); "
-                                   f"{s['already_there']:,} were already there."))
+        if self._busy_warning():
+            return
+        self.busy = True
+        self.backup_button.configure(state="disabled")
+        self.backup_check.configure(state="disabled")
+        self.backup_stop.configure(state="normal")
+        self.backup_result.configure(text="")
+        self.banner.configure(text="Backing up to both HDDs…")
+        guardian = self.guardian()
+        self._active_guardian = guardian
+        ssd = self.ssd_root()
+
+        def worker() -> None:
+            try:
+                summary = guardian.backup_everything(ssd, self._progress)
+                self._post(lambda: self._backup_done(summary))
+            except Exception as exc:  # noqa: BLE001 - shown to the user, never a trace
+                detail = str(exc)
+                self._post(lambda: self._backup_done({"error": detail}))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def stop_backup(self) -> None:
+        if self._active_guardian is not None:
+            self._active_guardian.stop()
+            self.backup_stop.configure(state="disabled")
+            self.banner.configure(text="Stopping after the file being copied…")
+
+    def _backup_done(self, summary: dict) -> None:
+        self.busy = False
+        self._active_guardian = None
+        self.backup_stop.configure(state="disabled")
+        self.backup_check.configure(state="normal")
+        self.progress.configure(value=0)
+        self.progress_text.configure(text="")
+        if "error" in summary:
+            self.banner.configure(text="Nothing was copied")
+            self.backup_result.configure(text=summary["error"])
+        else:
+            failures = summary["failures"]
+            text = (f"{summary['copied']:,} copies made and verified "
+                    f"({_human(summary['bytes'])}).")
+            if summary["stopped"]:
+                self.banner.configure(text="Stopped")
+                text += " Stopped before the end — press the button again to carry on."
+            elif failures:
+                self.banner.configure(text=f"{len(failures)} file(s) had a problem")
+                shown = "\n".join(f"  • {item}" for item in failures[:6])
+                more = f"\n  … and {len(failures) - 6} more" if len(failures) > 6 else ""
+                text += f"\n\nThese did not complete:\n{shown}{more}"
+            else:
+                self.banner.configure(text="Done — both HDDs are up to date")
+            self.backup_result.configure(text=text)
+        self.refresh_backup_plan()
+        self.refresh_status()
 
     def start_sync(self) -> None:
         self._run_stage("sync", self.sync_button, self.sync_result,
@@ -549,6 +673,8 @@ class App(tk.Tk):
                                    f"{s['already_there']:,} were already in Drive."))
 
     def _run_stage(self, name: str, button: ttk.Button, result: ttk.Label, work, describe) -> None:
+        if self._busy_warning():
+            return
         root, day = self.ssd_root(), self.day.get()
         if root is None or not day:
             messagebox.showinfo("Nothing selected", "Choose a shoot day first.", parent=self)
@@ -594,7 +720,7 @@ class App(tk.Tk):
     def _progress(self, done: int, total: int, text: str) -> None:
         percent = (done / total * 100) if total else 0
         self.after(0, lambda: (self.progress.configure(value=percent),
-                               self.progress_text.configure(text=f"{done:,} of {total:,} — {text}")))
+                               self.progress_text.configure(text=text)))
 
     # ----------------------------------------------------------------- dialogs
 
@@ -800,6 +926,14 @@ class CardOffload(tk.Toplevel):
         if not self.ssd.get().strip():
             messagebox.showinfo("Choose the SSD", "Choose the destination SSD first.", parent=self)
             return
+        # One job at a time, across the whole app: a card copy and a backup
+        # running together halve each other's speed on the same SSD, and the
+        # backup could pick up a day that is still half-copied.
+        if self.master.busy:
+            messagebox.showinfo("One job at a time",
+                                "Wait for the current copy to finish first.", parent=self)
+            return
+        self.master.busy = True
         self.transfer_button.configure(state="disabled")
         self.card_picker.configure(state="disabled")
         threading.Thread(target=self._transfer_worker, daemon=True).start()
@@ -820,12 +954,14 @@ class CardOffload(tk.Toplevel):
         self.after(0, lambda: (self.progress.configure(value=percent), self.progress_text.configure(text=text)))
 
     def _transfer_complete(self) -> None:
+        self.master.busy = False
         self.progress.configure(value=100)
         self.progress_text.configure(text=f"VERIFIED — every file copied and checked at {self.destination}")
         self.eject_button.configure(state="normal")
         messagebox.showinfo("Transfer verified", "Every file was copied and checksum-verified. The card is now safe to eject from this app.", parent=self)
 
     def _transfer_failed(self, detail: str) -> None:
+        self.master.busy = False
         self.progress_text.configure(text="Transfer stopped — source card was not changed")
         self.transfer_button.configure(state="normal")
         self.card_picker.configure(state="normal")
