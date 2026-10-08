@@ -132,6 +132,10 @@ The Python package stays `footage_guardian` even though the app is named
 "Footage Guardian Auto DIT"; renaming it churns every import for no user benefit.
 
 ## Hard rules for working here
+- **No real names from Kevin's drives or accounts in this repo** — not in
+  code, tests, notes or commit messages. It is public; folder names, shoot
+  names, the client's brand and the Drive folder belong in `HANDOVER.md`.
+  Test fixtures use invented names. (Broken once, 2026-10-08.)
 - **Write a test for every behaviour that protects footage.** Run the suite and
   show passing output before calling anything done.
 - Small commits with clear messages after each working step.
@@ -287,7 +291,7 @@ drives is reported and left alone.
 
 **Every top-level folder is mirrored, not only date-named ones.** The first
 scan of Kevin's real drives found footage the date rule skipped: `100_PANA`
-and "Sherman Island and deck build 8:31:26" only on the SSD, and days typed
+and a shoot folder named in words only on the SSD, and days typed
 `0CT:6:26`, `9:1026`, `oct 5:26` on one HDD only. Do not go back to
 guessing dates from folder names for backup. Hidden and system folders
 (Trash, Spotlight, Time Machine) are skipped; loose top-level files are

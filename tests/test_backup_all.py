@@ -199,12 +199,12 @@ class BackupEverythingTests(unittest.TestCase):
         # Found on Kevin's real drives: footage only on the SSD under names
         # the date rule skipped, and hand-typed days on one HDD only.
         write(self.ssd, "100_PANA/P1000001.MOV", b"raw card dump" * 50)
-        write(self.ssd, "Sherman Island and deck build 8:31:26/A.MOV", b"named shoot" * 50)
+        write(self.ssd, "Beach shoot and set build 8:31:26/A.MOV", b"named shoot" * 50)
         write(self.one, "0CT:6:26/Main Cam/B.MOV", b"typed with a zero" * 50)
         write(self.one, "oct 5:26/C.MOV", b"typed in words" * 50)
         summary = run_backup(self.plan())
         self.assertEqual(summary["failures"], [])
-        for relative in ("100_PANA/P1000001.MOV", "Sherman Island and deck build 8:31:26/A.MOV"):
+        for relative in ("100_PANA/P1000001.MOV", "Beach shoot and set build 8:31:26/A.MOV"):
             self.assertTrue((self.one / relative).exists() and (self.two / relative).exists(), relative)
         for relative in ("0CT:6:26/Main Cam/B.MOV", "oct 5:26/C.MOV"):
             self.assertTrue((self.two / relative).exists(), relative)

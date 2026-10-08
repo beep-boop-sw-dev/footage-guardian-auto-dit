@@ -21,8 +21,8 @@ What it never does:
 
 Every top-level folder is mirrored, not only ones named like a date. The
 first look at Kevin's real drives (2026-10-08) found footage the date
-rule would have skipped: a raw `100_PANA` card folder and a "Sherman
-Island and deck build 8:31:26" shoot existing only on the SSD, and days
+rule would have skipped: a raw `100_PANA` card folder and a shoot folder
+named in words, both only on the SSD, and days
 typed by hand as `0CT:6:26`, `9:1026` and `oct 5:26` on one HDD only.
 Guessing dates out of names like those is how footage gets missed; a
 mirror copies what is there, under the name it has.
