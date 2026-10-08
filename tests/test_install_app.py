@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import plistlib
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -26,12 +27,8 @@ class InstallAppTests(unittest.TestCase):
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
         self.tmp = Path(self._tmp.name)
-        self.folder = self.tmp / "Footage Guardian"
-        self.folder.mkdir()
         self.marker = self.tmp / "launched"
-        self.launcher = self.folder / "Footage Guardian Auto DIT.command"
-        self.launcher.write_text(f"#!/bin/zsh\nprint -r -- ran > {self.marker}\n")
-        self.launcher.chmod(0o755)
+        self.folder = self.make_source(self.tmp / "Desktop" / "Footage Guardian", "v1")
         self.applications = self.tmp / "Applications"
         # A fake osascript that records what it was asked to show.
         fakes = self.tmp / "bin"
@@ -45,55 +42,75 @@ class InstallAppTests(unittest.TestCase):
     def tearDown(self):
         self._tmp.cleanup()
 
+    def make_source(self, folder: Path, version: str) -> Path:
+        """A stand-in Footage Guardian folder whose launcher reports where it ran."""
+        package = folder / install_app.PACKAGE
+        (package / "__pycache__").mkdir(parents=True)
+        (package / "__init__.py").write_text(f"VERSION = {version!r}\n")
+        (package / "__pycache__" / "junk.pyc").write_bytes(b"x")
+        launcher = folder / install_app.LAUNCHER_NAME
+        launcher.write_text(
+            "#!/bin/zsh\ncd \"${0:A:h}\"\n"
+            f"print -r -- \"$PWD $(<{install_app.PACKAGE}/__init__.py)\" > {self.marker}\n")
+        launcher.chmod(0o755)
+        return folder
+
     def run_app(self, app: Path) -> subprocess.CompletedProcess:
         executable = app / "Contents" / "MacOS" / install_app.APP_NAME
         return subprocess.run([str(executable)], env=self.env, capture_output=True,
                               text=True, stdin=subprocess.DEVNULL, timeout=30)
 
-    def test_clicking_the_app_runs_the_launcher_in_the_folder(self):
-        app = install_app.build_app(self.applications, self.launcher)
+    def test_clicking_the_app_runs_the_copy_inside_the_app(self):
+        app = install_app.build_app(self.applications, self.folder)
         self.assertEqual(self.run_app(app).returncode, 0)
-        self.assertEqual(self.marker.read_text().strip(), "ran")
+        ran_in = self.marker.read_text()
+        self.assertIn(str((app / "Contents" / "Resources").resolve()), ran_in)
+        self.assertNotIn(str(self.folder), ran_in)
 
-    def test_a_folder_with_spaces_and_quotes_still_launches(self):
-        odd = self.tmp / "Kevin's Footage Guardian"
-        odd.mkdir()
-        launcher = odd / self.launcher.name
-        launcher.write_text(self.launcher.read_text())
-        app = install_app.build_app(self.applications, launcher)
+    def test_the_app_never_needs_the_desktop_folder(self):
+        # On Kevin's Mac a new app was refused the Desktop without a prompt
+        # and quit silently. The app must start with that folder unreadable.
+        app = install_app.build_app(self.applications, self.folder)
+        shutil.rmtree(self.folder)
+        self.assertEqual(self.run_app(app).returncode, 0)
+        self.assertIn("VERSION = 'v1'", self.marker.read_text())
+
+    def test_an_app_in_a_path_with_spaces_and_quotes_still_launches(self):
+        app = install_app.build_app(self.tmp / "Kevin's Apps", self.folder)
         self.assertEqual(self.run_app(app).returncode, 0)
         self.assertTrue(self.marker.exists())
 
-    def test_a_moved_folder_is_reported_not_silent(self):
-        app = install_app.build_app(self.applications, self.launcher)
-        self.launcher.unlink()
+    def test_a_launcher_that_cannot_run_is_reported_not_silent(self):
+        app = install_app.build_app(self.applications, self.folder)
+        (app / "Contents" / "Resources" / install_app.LAUNCHER_NAME).unlink()
         result = self.run_app(app)
         self.assertNotEqual(result.returncode, 0)
-        self.assertFalse(self.marker.exists())
-        said = self.alerts.read_text()
-        self.assertIn("cannot find its folder", said)
-        self.assertIn(str(self.launcher.resolve()), said)
+        self.assertIn("could not start", self.alerts.read_text())
+
+    def test_it_copies_the_code_but_not_python_cache(self):
+        app = install_app.build_app(self.applications, self.folder)
+        package = app / "Contents" / "Resources" / install_app.PACKAGE
+        self.assertTrue((package / "__init__.py").is_file())
+        self.assertFalse((package / "__pycache__").exists())
 
     def test_the_bundle_is_one_macos_accepts(self):
-        app = install_app.build_app(self.applications, self.launcher)
+        app = install_app.build_app(self.applications, self.folder)
         plist = app / "Contents" / "Info.plist"
         lint = subprocess.run(["plutil", "-lint", str(plist)], capture_output=True, text=True)
         self.assertEqual(lint.returncode, 0, lint.stdout)
         info = plistlib.loads(plist.read_bytes())
         self.assertEqual(info["CFBundleIdentifier"], install_app.BUNDLE_ID)
+        self.assertTrue(info["CFBundleVersion"])
         executable = app / "Contents" / "MacOS" / info["CFBundleExecutable"]
         self.assertTrue(os.access(executable, os.X_OK))
         self.assertIn("never changes or deletes", info["NSRemovableVolumesUsageDescription"])
 
-    def test_reinstalling_replaces_its_own_app(self):
-        install_app.build_app(self.applications, self.launcher)
-        moved = self.tmp / "Moved"
-        moved.mkdir()
-        new_launcher = moved / self.launcher.name
-        new_launcher.write_text(self.launcher.read_text())
-        app = install_app.build_app(self.applications, new_launcher)
-        script = (app / "Contents" / "MacOS" / install_app.APP_NAME).read_text()
-        self.assertIn(str(new_launcher.resolve()), script)
+    def test_reinstalling_after_an_update_puts_the_new_code_in(self):
+        install_app.build_app(self.applications, self.folder)
+        (self.folder / install_app.PACKAGE / "__init__.py").write_text("VERSION = 'v2'\n")
+        app = install_app.build_app(self.applications, self.folder)
+        self.run_app(app)
+        self.assertIn("VERSION = 'v2'", self.marker.read_text())
         self.assertEqual([p.name for p in self.applications.iterdir()], [app.name])
 
     def test_it_never_replaces_someone_elses_app(self):
@@ -102,12 +119,12 @@ class InstallAppTests(unittest.TestCase):
         (other / "Info.plist").write_bytes(plistlib.dumps({"CFBundleIdentifier": "com.example.other"}))
         (other / "keep-me").write_text("theirs")
         with self.assertRaises(install_app.InstallRefused):
-            install_app.build_app(self.applications, self.launcher)
+            install_app.build_app(self.applications, self.folder)
         self.assertEqual((other / "keep-me").read_text(), "theirs")
 
-    def test_it_refuses_without_a_launcher(self):
+    def test_it_refuses_a_folder_that_is_not_footage_guardian(self):
         with self.assertRaises(install_app.InstallRefused):
-            install_app.build_app(self.applications, self.tmp / "nowhere.command")
+            install_app.build_app(self.applications, self.tmp)
         self.assertFalse((self.applications / f"{install_app.APP_NAME}.app").exists())
 
     def test_the_installer_runs_on_apples_python(self):
@@ -119,10 +136,17 @@ class InstallAppTests(unittest.TestCase):
         result = subprocess.run(
             [str(apple), "-c", f"import sys; sys.path.insert(0, {str(tools)!r}); "
              f"import install_app; from pathlib import Path; "
-             f"install_app.build_app(Path({str(self.applications)!r}), Path({str(self.launcher)!r}))"],
+             f"install_app.build_app(Path({str(self.applications)!r}), Path({str(self.folder)!r}))"],
             capture_output=True, text=True,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_the_real_folder_installs(self):
+        app = install_app.build_app(self.applications)
+        resources = app / "Contents" / "Resources"
+        self.assertTrue((resources / install_app.LAUNCHER_NAME).is_file())
+        self.assertTrue((resources / install_app.PACKAGE / "cli.py").is_file())
+        self.assertTrue((resources / install_app.PACKAGE / "ui.py").is_file())
 
 
 class LauncherFromTheDockTests(unittest.TestCase):

@@ -262,7 +262,7 @@ q                 <span class="note">(quit config)</span></div>
 
   <div class="cmd">python3 ~/Desktop/"Footage Guardian"/tools/install_app.py</div>
 
-  <p>It says <strong>Done</strong> and where it put the app. You only ever do this once — updates later reach the app by themselves.</p>
+  <p>It says <strong>Done</strong> and where it put the app. The app carries its own copy of Footage Guardian, so it does not matter if the folder is moved later.</p>
 
   <p class="type-this">Open it</p>
   <p>Press <strong>Cmd+Space</strong>, type <strong>Footage Guardian</strong>, press Enter.</p>
@@ -274,8 +274,8 @@ q                 <span class="note">(quit config)</span></div>
   </div>
 
   <div class="callout">
-    <span class="label">Leave the folder where it is</span>
-    <p>The app runs what is inside the <strong>Footage Guardian</strong> folder on your Desktop, so moving or renaming that folder stops it opening. If that happens it tells you so — put the folder back. If the app will not open at all, the old way still works: double-click <strong>Footage Guardian Auto DIT.command</strong> inside the folder.</p>
+    <span class="label">If the app will not open</span>
+    <p>The old way still works: open the <strong>Footage Guardian</strong> folder on your Desktop and double-click <strong>Footage Guardian Auto DIT.command</strong>. Then tell Stuart.</p>
   </div>
 
   <div class="callout safe">
@@ -289,10 +289,9 @@ q                 <span class="note">(quit config)</span></div>
   <h2>Getting updates later</h2>
   <p>When Stuart tells you there is a fix, <strong>close the app</strong>, then paste:</p>
 
-  <div class="cmd">cd ~/Desktop/"Footage Guardian"
-git pull</div>
+  <div class="cmd">cd ~/Desktop/"Footage Guardian" &amp;&amp; git pull &amp;&amp; python3 tools/install_app.py</div>
 
-  <p>That is the whole thing. A second or two, and a short list of what changed. Open the app again afterwards.</p>
+  <p>That is the whole thing. A few seconds, a short list of what changed, then <strong>Done</strong>. Open the app again afterwards. The last part puts the new version into the app — without it the app keeps running the old one.</p>
 
   <div class="callout safe">
     <span class="label">An update cannot lose your work</span>

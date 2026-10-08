@@ -105,8 +105,8 @@ This makes Footage Guardian an app you click, like any other. Paste:
 
     python3 ~/Desktop/"Footage Guardian"/tools/install_app.py
 
-It says "Done" and where it put the app. You only ever do this once —
-updates later reach the app by themselves.
+It says "Done" and where it put the app. The app carries its own copy of
+Footage Guardian, so it does not matter if this folder is moved later.
 
 Open it: press Cmd+Space, type Footage Guardian, press Enter.
 
@@ -123,10 +123,6 @@ A window opens with four tabs along the top. If you got that far, setup
 worked. Leave it there — Stuart will take you through the Drives tab and
 the rest on the phone.
 
-Leave the "Footage Guardian" folder on your Desktop. The app runs what
-is inside it, so moving or renaming the folder stops the app opening.
-If that happens it tells you so — put the folder back.
-
 If the app will not open at all, the old way still works: open the
 Footage Guardian folder and double-click Footage Guardian Auto DIT.command
 
@@ -135,11 +131,11 @@ GETTING UPDATES LATER
 ────────────────────────────────────────────────────────────────────────
 When Stuart tells you there is a fix, close the app, then paste:
 
-    cd ~/Desktop/"Footage Guardian"
-    git pull
+    cd ~/Desktop/"Footage Guardian" && git pull && python3 tools/install_app.py
 
-That is the whole thing. A second or two, and a short list of what
-changed. Open the app again afterwards.
+That is the whole thing. A few seconds, a short list of what changed,
+then "Done". Open the app again afterwards. The last part puts the new
+version into the app — without it the app keeps running the old one.
 
 Your settings and your records are NOT in that folder — they live in
 your Library folder — so an update never touches which drives you chose
