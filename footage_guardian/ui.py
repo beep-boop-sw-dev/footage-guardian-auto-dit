@@ -27,6 +27,15 @@ from .ingest import (
     describe_mounted_devices,
     inspect_card,
 )
+from .notify import (
+    NOTICES,
+    Notice,
+    new_topic,
+    notice_for_backup,
+    notice_for_offload,
+    notice_for_sync,
+    send_in_background,
+)
 from .meta_import import MetaCandidate, MetaImporter, find_recent_meta
 
 
@@ -370,6 +379,74 @@ class App(tk.Tk):
         self.detect_button.pack(side="left", padx=8)
         self.drive_saved = ttk.Label(actions, text="")
         self.drive_saved.pack(side="left", padx=10)
+
+        ttk.Separator(tab).grid(row=7, column=0, columnspan=3, sticky="ew", pady=(4, 12))
+        phone = ttk.Frame(tab)
+        phone.grid(row=8, column=0, columnspan=3, sticky="ew")
+        ttk.Label(phone, text="Phone notifications", font=("Helvetica", 13, "bold")).pack(anchor="w")
+        self.notify_help = ttk.Label(phone, text="", wraplength=860, justify="left")
+        self.notify_help.pack(anchor="w", pady=(4, 6))
+        self.notify_topic_var = tk.StringVar(value="")
+        # Read-only but selectable, so the topic can be copied rather than retyped.
+        self.notify_topic_entry = ttk.Entry(phone, textvariable=self.notify_topic_var,
+                                            state="readonly", width=48, font=("Menlo", 13))
+        phone_buttons = ttk.Frame(phone)
+        phone_buttons.pack(anchor="w", side="bottom", pady=(8, 0))
+        self.notify_on = ttk.Button(phone_buttons, text="Turn on phone notifications",
+                                    command=self.notifications_on)
+        self.notify_test = ttk.Button(phone_buttons, text="Send a test", command=self.notifications_test)
+        self.notify_off = ttk.Button(phone_buttons, text="Turn off", command=self.notifications_off)
+        self.notify_result = ttk.Label(phone_buttons, text="")
+        self._show_notify_state()
+
+    # ------------------------------------------------------ phone notifications
+
+    def _show_notify_state(self) -> None:
+        for widget in (self.notify_on, self.notify_test, self.notify_off, self.notify_result):
+            widget.pack_forget()
+        topic = self.config_data.notify_topic
+        self.notify_topic_var.set(topic)
+        if topic:
+            self.notify_help.configure(text=(
+                "On. When a card copy, backup or upload finishes, the phone gets a ping saying "
+                "which one and whether it worked — nothing else about the footage.\n\n"
+                "To set up a phone: install the free app ntfy (App Store or Google Play), "
+                "tap +, and subscribe to this topic, typed exactly. Keep it private: anyone "
+                "with the topic can read the pings."))
+            self.notify_topic_entry.pack(anchor="w")
+            self.notify_test.pack(side="left")
+            self.notify_off.pack(side="left", padx=8)
+        else:
+            self.notify_topic_entry.pack_forget()
+            self.notify_help.configure(text=(
+                "Off. Turn this on to get a ping on the phone when a card copy, backup or "
+                "upload finishes, so you can walk away and come back to swap cameras."))
+            self.notify_on.pack(side="left")
+        self.notify_result.pack(side="left", padx=10)
+
+    def notifications_on(self) -> None:
+        self.config_data.notify_topic = new_topic()
+        self.config_data.save(self.config_path)
+        self._show_notify_state()
+
+    def notifications_off(self) -> None:
+        if not messagebox.askyesno(
+                "Turn off phone notifications?",
+                "The phone will stop getting pings. Turning them back on makes a new topic, "
+                "so the phone would need to subscribe again.", parent=self):
+            return
+        self.config_data.notify_topic = ""
+        self.config_data.save(self.config_path)
+        self._show_notify_state()
+
+    def notifications_test(self) -> None:
+        self.notify_result.configure(text="Sending…")
+        self._notify(NOTICES["test"], on_done=lambda problem: self._post(
+            lambda: self.notify_result.configure(text=problem or "Sent — check the phone.")))
+
+    def _notify(self, notice: Notice | None, on_done=None) -> None:
+        """Ping the phone if notifications are on. Never blocks, never raises."""
+        send_in_background(self.config_data.notify_topic, notice, self.log, on_done)
 
     def _drive_row(self, parent, label: str, value: str, row: int):
         """A drive slot: what we think it is, with every other drive one click away."""
@@ -718,6 +795,7 @@ class App(tk.Tk):
             else:
                 self.banner.configure(text="Done — both HDDs are up to date")
             self.backup_result.configure(text=text)
+        self._notify(notice_for_backup(summary))
         self.refresh_backup_plan()
         self.refresh_status()
 
@@ -841,6 +919,7 @@ class App(tk.Tk):
             else:
                 self.banner.configure(text="Done — Google Drive is up to date")
             self.sync_result.configure(text=text)
+        self._notify(notice_for_sync(summary))
         self.refresh_sync_plan()
         self.refresh_status()
 
@@ -1077,6 +1156,7 @@ class CardOffload(tk.Toplevel):
 
     def _transfer_complete(self) -> None:
         self.master.busy = False
+        self.master._notify(notice_for_offload(True))
         self.progress.configure(value=100)
         self.progress_text.configure(text=f"VERIFIED — every file copied and checked at {self.destination}")
         self.eject_button.configure(state="normal")
@@ -1084,6 +1164,7 @@ class CardOffload(tk.Toplevel):
 
     def _transfer_failed(self, detail: str) -> None:
         self.master.busy = False
+        self.master._notify(notice_for_offload(False))
         self.progress_text.configure(text="Transfer stopped — source card was not changed")
         self.transfer_button.configure(state="normal")
         self.card_picker.configure(state="normal")

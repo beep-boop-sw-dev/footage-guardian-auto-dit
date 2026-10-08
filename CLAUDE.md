@@ -92,7 +92,9 @@ three trees identical.
   to a secret topic, no account, no dependency. The ping carries **no
   shoot date, file count, client name or path** — a topic URL is a
   guessable shared secret, so nothing about the work may travel over it.
-  "Footage Guardian: transfer finished" and that is all. The app must
+  Loosened by Stuart 2026-10-08: it may say *which job* ended (card copy,
+  backup, upload) and *whether it worked*, from fixed strings in
+  `notify.NOTICES` — never anything formatted from the work itself. The app must
   still work fully with notifications switched off or the network down;
   a failed POST is logged and never fails a transfer.
 
@@ -277,8 +279,11 @@ optional, and unable to fail a transfer. Off unless a topic is configured.
 leaves the transfer reported as successful, and the suite covers both without
 touching the network.
 
-Out of scope for now: notifications for anything but a finished transfer,
-and any notification carrying detail about the work.
+**Piece 5 built 2026-10-08** (`notify.py`): pings for a finished card copy,
+backup and upload, set up from the Drives tab. Real ntfy.sh publish and
+read-back verified once against a throwaway topic.
+
+Out of scope for now: any notification carrying detail about the work.
 
 ## Back up tab works across every day (2026-10-08)
 Stage two no longer asks for a shoot day. `backup.scan_backups` compares

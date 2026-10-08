@@ -30,6 +30,8 @@ class Config:
     backup_rate: float = 0.0
     # The same for uploads. Almost entirely the internet connection's speed.
     sync_rate: float = 0.0
+    # ntfy.sh topic for "job finished" pings to Kevin's phone. Empty = off.
+    notify_topic: str = ""
     video_extensions: list[str] = field(default_factory=lambda: [
         ".mp4", ".mov", ".mxf", ".mts", ".m2ts", ".avi", ".braw", ".r3d",
         ".crm", ".ari", ".wav", ".mp3", ".jpg", ".jpeg", ".png", ".xml",
